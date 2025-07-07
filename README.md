@@ -293,6 +293,24 @@ Desarrollo exclusivo para **Saldivia**. Todos los derechos reservados.
 
 ---
 
+## 🚀 Estado del Proyecto
+
+### **Versiones**
+- ✅ **v1.0.1** - Módulo de usuarios completo (MAIN)
+  - Gestión completa de usuarios y permisos
+  - Paginación, filtros y búsqueda avanzada
+  - Exportación CSV/Excel
+  - Historial de auditoría
+  - Cambio de contraseñas
+- 🚧 **v1.0.2-dev** - En desarrollo activo
+- 🛡️ **main** - Rama protegida (solo merge via PR)
+
+### **Protección de Ramas**
+- 🔒 Rama `main` protegida contra push directo
+- 📋 Flujo de trabajo con Pull Requests obligatorios
+- 🗑️ Ramas de desarrollo eliminadas tras merge
+- 📁 Ver `.github/branch-protection.md` para detalles
+
 ## 🎉 ¡Sistema ERP Moderno Listo!
 
 Este sistema ERP moderno está diseñado específicamente para las necesidades de Saldivia, combinando:
