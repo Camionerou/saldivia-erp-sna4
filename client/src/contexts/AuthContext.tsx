@@ -10,9 +10,16 @@ interface User {
   email?: string;
   firstName?: string;
   lastName?: string;
+  active?: boolean;
+  lastLogin?: string;
+  createdAt?: string;
   profile?: {
     name: string;
     permissions: string[];
+    profileImage?: string;
+    phone?: string;
+    department?: string;
+    position?: string;
   };
 }
 
@@ -29,7 +36,8 @@ type AuthAction =
   | { type: 'LOGIN_FAILURE'; payload: string }
   | { type: 'LOGOUT' }
   | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'CLEAR_ERROR' };
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'UPDATE_USER'; payload: User };
 
 const initialState: AuthState = {
   user: null,
@@ -70,6 +78,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return { ...state, loading: action.payload };
     case 'CLEAR_ERROR':
       return { ...state, error: null };
+    case 'UPDATE_USER':
+      return { ...state, user: action.payload };
     default:
       return state;
   }
@@ -79,6 +89,7 @@ interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -166,6 +177,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await authService.verifyToken();
+      if (response.valid && response.user) {
+        dispatch({ type: 'UPDATE_USER', payload: response.user });
+      }
+    } catch (error) {
+      console.error('Error al refrescar usuario:', error);
+    }
+  };
+
   const logout = async () => {
     try {
       await authService.logout();
@@ -188,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     clearError,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

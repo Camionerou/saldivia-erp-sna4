@@ -207,15 +207,44 @@ router.get('/me', async (req, res) => {
 
     // Para usuario demo
     if (decoded.username === 'adrian') {
+      // Buscar si hay una imagen de perfil guardada para el usuario demo
+      const fs = require('fs');
+      const path = require('path');
+      const uploadsDir = path.join(__dirname, '../../uploads/profiles');
+      let demoProfileImage = null;
+      
+      try {
+        if (fs.existsSync(uploadsDir)) {
+          const files = fs.readdirSync(uploadsDir);
+          const userFiles = files.filter((file: string) => file.startsWith('profile_1_'));
+          if (userFiles.length > 0) {
+            // Usar la imagen más reciente
+            userFiles.sort();
+            demoProfileImage = `/uploads/profiles/${userFiles[userFiles.length - 1]}`;
+          }
+        }
+      } catch (err) {
+        console.log('Error buscando imagen de perfil demo:', err);
+      }
+      
       return res.json({
         user: {
           id: '1',
           username: 'adrian',
           email: 'adrian@saldiviabuses.com',
+          firstName: 'Adrian',
+          lastName: 'Saldivia',
+          active: true,
+          lastLogin: new Date().toISOString(),
+          createdAt: new Date('2024-01-01').toISOString(),
           profile: {
             id: '1',
             name: 'Administrador',
-            permissions: ['all']
+            permissions: ['all'],
+            profileImage: demoProfileImage,
+            phone: '+54 3405 123456',
+            department: 'Administración',
+            position: 'Director General'
           }
         }
       });
@@ -225,7 +254,20 @@ router.get('/me', async (req, res) => {
       // Buscar usuario en base de datos
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        include: { profile: true }
+        include: { 
+          profile: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              permissions: true,
+              profileImage: true,
+              phone: true,
+              department: true,
+              position: true
+            }
+          }
+        }
       });
 
       if (!user || !user.active) {
@@ -237,6 +279,11 @@ router.get('/me', async (req, res) => {
           id: user.id,
           username: user.username,
           email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          active: user.active,
+          lastLogin: user.lastLogin?.toISOString(),
+          createdAt: user.createdAt.toISOString(),
           profile: user.profile
         }
       });

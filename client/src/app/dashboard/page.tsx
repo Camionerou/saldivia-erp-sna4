@@ -175,9 +175,12 @@ export default function DashboardPage() {
             open={Boolean(anchorEl)}
             onClose={handleMenuClose}
           >
-            <MenuItem onClick={handleMenuClose}>
+            <MenuItem onClick={() => {
+              router.push('/profile');
+              handleMenuClose();
+            }}>
               <AccountCircle sx={{ mr: 1 }} />
-              Perfil
+              Mi Perfil
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>

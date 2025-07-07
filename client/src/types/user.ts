@@ -18,6 +18,10 @@ export interface Profile {
   description?: string;
   permissions: string[];
   userCount: number;
+  profileImage?: string; // Ruta de la imagen de perfil
+  phone?: string; // Teléfono del usuario
+  department?: string; // Departamento
+  position?: string; // Cargo/Posición
 }
 
 export interface CreateUserData {
