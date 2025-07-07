@@ -1,0 +1,387 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// === MODELOS DE USUARIO Y AUTENTICACIÓN ===
+
+model User {
+  id              String   @id @default(cuid())
+  username        String   @unique
+  email           String?  @unique
+  password        String
+  firstName       String?
+  lastName        String?
+  active          Boolean  @default(true)
+  lastLogin       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  profile         Profile?
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  
+  @@map("users")
+}
+
+model Profile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  name        String
+  description String?
+  permissions Json    // Almacena permisos como JSON
+  
+  // Relaciones
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("profiles")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  // Relaciones
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+// === MODELOS DE CONTABILIDAD ===
+
+model Account {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?
+  accountType     String   // ACTIVO, PASIVO, PATRIMONIO, INGRESO, EGRESO
+  parentId        String?
+  level           Int      @default(1)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  parent          Account?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        Account[] @relation("AccountHierarchy")
+  journalEntries  JournalEntry[]
+  
+  @@map("accounts")
+}
+
+model FiscalYear {
+  id          String   @id @default(cuid())
+  year        Int      @unique
+  startDate   DateTime
+  endDate     DateTime
+  active      Boolean  @default(true)
+  closed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  journalEntries JournalEntry[]
+  
+  @@map("fiscal_years")
+}
+
+model CostCenter {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  journalEntries JournalEntry[]
+  
+  @@map("cost_centers")
+}
+
+model JournalEntry {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  date          DateTime
+  description   String
+  reference     String?
+  accountId     String
+  fiscalYearId  String
+  costCenterId  String?
+  debit         Decimal  @default(0) @db.Decimal(15, 2)
+  credit        Decimal  @default(0) @db.Decimal(15, 2)
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relaciones
+  account       Account    @relation(fields: [accountId], references: [id])
+  fiscalYear    FiscalYear @relation(fields: [fiscalYearId], references: [id])
+  costCenter    CostCenter? @relation(fields: [costCenterId], references: [id])
+  
+  @@map("journal_entries")
+}
+
+// === MODELOS DE CAJA Y BANCOS ===
+
+model Bank {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  accounts    BankAccount[]
+  
+  @@map("banks")
+}
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  bankId        String
+  accountNumber String
+  accountType   String   // CORRIENTE, AHORRO, etc.
+  currency      String   @default("ARS")
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relaciones
+  bank          Bank     @relation(fields: [bankId], references: [id])
+  movements     BankMovement[]
+  checkbooks    Checkbook[]
+  
+  @@map("bank_accounts")
+}
+
+model BankMovement {
+  id            String   @id @default(cuid())
+  bankAccountId String
+  date          DateTime
+  description   String
+  reference     String?
+  debit         Decimal  @default(0) @db.Decimal(15, 2)
+  credit        Decimal  @default(0) @db.Decimal(15, 2)
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  reconciled    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relaciones
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  
+  @@map("bank_movements")
+}
+
+model Checkbook {
+  id            String   @id @default(cuid())
+  bankAccountId String
+  series        String
+  fromNumber    Int
+  toNumber      Int
+  currentNumber Int
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relaciones
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  checks        Check[]
+  
+  @@map("checkbooks")
+}
+
+model Check {
+  id          String   @id @default(cuid())
+  checkbookId String
+  number      String
+  date        DateTime
+  amount      Decimal  @db.Decimal(15, 2)
+  payee       String
+  status      String   // EMITIDO, COBRADO, ANULADO
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  checkbook   Checkbook @relation(fields: [checkbookId], references: [id])
+  
+  @@map("checks")
+}
+
+// === MODELOS DE COMPRAS Y VENTAS ===
+
+model Supplier {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  taxId       String?  @unique
+  address     String?
+  phone       String?
+  email       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  purchases   Purchase[]
+  
+  @@map("suppliers")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  taxId       String?  @unique
+  address     String?
+  phone       String?
+  email       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  sales       Sale[]
+  
+  @@map("customers")
+}
+
+model Purchase {
+  id          String   @id @default(cuid())
+  supplierId  String
+  number      String   @unique
+  date        DateTime
+  description String?
+  subtotal    Decimal  @db.Decimal(15, 2)
+  tax         Decimal  @db.Decimal(15, 2)
+  total       Decimal  @db.Decimal(15, 2)
+  status      String   @default("PENDING") // PENDING, APPROVED, PAID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  
+  @@map("purchases")
+}
+
+model Sale {
+  id          String   @id @default(cuid())
+  customerId  String
+  number      String   @unique
+  date        DateTime
+  description String?
+  subtotal    Decimal  @db.Decimal(15, 2)
+  tax         Decimal  @db.Decimal(15, 2)
+  total       Decimal  @db.Decimal(15, 2)
+  status      String   @default("PENDING") // PENDING, APPROVED, PAID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  customer    Customer @relation(fields: [customerId], references: [id])
+  
+  @@map("sales")
+}
+
+// === MODELOS DE IVA ===
+
+model TaxPeriod {
+  id          String   @id @default(cuid())
+  year        Int
+  month       Int
+  startDate   DateTime
+  endDate     DateTime
+  active      Boolean  @default(true)
+  closed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  taxRecords  TaxRecord[]
+  
+  @@unique([year, month])
+  @@map("tax_periods")
+}
+
+model TaxRecord {
+  id            String   @id @default(cuid())
+  taxPeriodId   String
+  date          DateTime
+  type          String   // COMPRA, VENTA
+  documentType  String   // FACTURA, NOTA_CREDITO, etc.
+  documentNumber String
+  taxId         String
+  businessName  String
+  netAmount     Decimal  @db.Decimal(15, 2)
+  taxAmount     Decimal  @db.Decimal(15, 2)
+  totalAmount   Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relaciones
+  taxPeriod     TaxPeriod @relation(fields: [taxPeriodId], references: [id])
+  
+  @@map("tax_records")
+}
+
+// === MODELOS DE SISTEMA ===
+
+model SystemConfiguration {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("system_configurations")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  resource    String
+  resourceId  String?
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  // Relaciones
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String?
+  title       String
+  message     String
+  type        String   @default("INFO") // INFO, WARNING, ERROR, SUCCESS
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  @@map("notifications")
+} 
