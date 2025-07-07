@@ -114,7 +114,11 @@ export const requirePermission = (permission: string) => {
 
     const permissions = req.user.profile.permissions as string[];
     
-    if (!permissions.includes(permission) && !permissions.includes('ADMIN')) {
+    // Verificar si tiene permiso específico, 'all' o 'admin'
+    if (!permissions.includes(permission) && 
+        !permissions.includes('all') && 
+        !permissions.includes('admin') &&
+        !permissions.includes('ADMIN')) {
       res.status(403).json({ 
         error: `Acceso denegado. Se requiere permiso: ${permission}` 
       });
@@ -123,4 +127,27 @@ export const requirePermission = (permission: string) => {
 
     next();
   };
+};
+
+// Middleware para verificar si es administrador
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user?.profile?.permissions) {
+    res.status(403).json({ 
+      error: 'Acceso denegado. Se requieren permisos de administrador.' 
+    });
+    return;
+  }
+
+  const permissions = req.user.profile.permissions as string[];
+  
+  if (!permissions.includes('all') && 
+      !permissions.includes('admin') &&
+      !permissions.includes('ADMIN')) {
+    res.status(403).json({ 
+      error: 'Acceso denegado. Solo los administradores pueden realizar esta acción.' 
+    });
+    return;
+  }
+
+  next();
 }; 

@@ -2,9 +2,44 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Configuración de multer para subida de imágenes
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/profiles');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const userId = (req as any).user?.id || 'temp';
+    const ext = path.extname(file.originalname);
+    const filename = `profile_${userId}_${Date.now()}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 2 * 1024 * 1024 // 2MB máximo
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten archivos de imagen (JPEG, PNG, GIF, WebP)'));
+    }
+  }
+});
 
 // Función helper para crear logs de auditoría
 const createAuditLog = async (
@@ -303,8 +338,19 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/users - Crear nuevo usuario
+// POST /api/users - Crear nuevo usuario (solo admin)
 router.post('/', async (req, res) => {
+  // Verificar que el usuario actual sea administrador
+  const currentUserPermissions = (req as any).user?.profile?.permissions || [];
+  const isAdmin = currentUserPermissions.includes('all') || 
+                  currentUserPermissions.includes('admin') || 
+                  currentUserPermissions.includes('ADMIN');
+  
+  if (!isAdmin) {
+    return res.status(403).json({ 
+      error: 'Acceso denegado. Solo los administradores pueden crear usuarios.' 
+    });
+  }
   try {
     const validatedData = createUserSchema.parse(req.body);
     
@@ -525,8 +571,19 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/users/:id - Eliminar usuario
+// DELETE /api/users/:id - Eliminar usuario (solo admin)
 router.delete('/:id', async (req, res) => {
+  // Verificar que el usuario actual sea administrador
+  const currentUserPermissions = (req as any).user?.profile?.permissions || [];
+  const isAdmin = currentUserPermissions.includes('all') || 
+                  currentUserPermissions.includes('admin') || 
+                  currentUserPermissions.includes('ADMIN');
+  
+  if (!isAdmin) {
+    return res.status(403).json({ 
+      error: 'Acceso denegado. Solo los administradores pueden eliminar usuarios.' 
+    });
+  }
   try {
     const { id } = req.params;
     
@@ -614,8 +671,19 @@ router.post('/profiles', async (req, res) => {
   }
 });
 
-// PUT /api/users/:id/permissions - Actualizar permisos de usuario
+// PUT /api/users/:id/permissions - Actualizar permisos de usuario (solo admin)
 router.put('/:id/permissions', async (req, res) => {
+  // Verificar que el usuario actual sea administrador
+  const currentUserPermissions = (req as any).user?.profile?.permissions || [];
+  const isAdmin = currentUserPermissions.includes('all') || 
+                  currentUserPermissions.includes('admin') || 
+                  currentUserPermissions.includes('ADMIN');
+  
+  if (!isAdmin) {
+    return res.status(403).json({ 
+      error: 'Acceso denegado. Solo los administradores pueden gestionar permisos.' 
+    });
+  }
   try {
     const { id } = req.params;
     const { permissions } = req.body;
@@ -873,6 +941,133 @@ router.get('/export', async (req, res) => {
   } catch (error) {
     console.error('Error al exportar usuarios:', error);
     return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// PUT /api/users/profile - Actualizar perfil del usuario actual con foto
+router.put('/profile', upload.single('profileImage'), async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+
+    const { firstName, lastName, email, phone, department, position } = req.body;
+    
+    // Verificar si el usuario existe
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true }
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Preparar datos para actualización
+    const updateData: any = {};
+    
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+    if (email) updateData.email = email;
+
+    // Actualizar usuario básico
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        active: true,
+        updatedAt: true
+      }
+    });
+
+    // Manejar imagen de perfil
+    let profileImagePath = null;
+    if (req.file) {
+      profileImagePath = `/uploads/profiles/${req.file.filename}`;
+      
+      // Eliminar imagen anterior si existe
+      if (existingUser.profile?.profileImage) {
+        const oldImagePath = path.join(__dirname, '../../', existingUser.profile.profileImage);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+      }
+    }
+
+    // Actualizar o crear perfil extendido
+    const profileData: any = {};
+    if (phone) profileData.phone = phone;
+    if (department) profileData.department = department;
+    if (position) profileData.position = position;
+    if (profileImagePath) profileData.profileImage = profileImagePath;
+
+    if (Object.keys(profileData).length > 0) {
+      if (existingUser.profile) {
+        await prisma.profile.update({
+          where: { userId },
+          data: profileData
+        });
+      } else {
+        await prisma.profile.create({
+          data: {
+            userId,
+            name: `Perfil de ${updatedUser.username}`,
+            description: 'Perfil personalizado',
+            permissions: [],
+            ...profileData
+          }
+        });
+      }
+    }
+
+    // Log de auditoría
+    const currentUserId = (req as any).user?.id || 'admin';
+    await createAuditLog(
+      currentUserId,
+      'actualizar_perfil',
+      'user',
+      userId,
+      { 
+        firstName: existingUser.firstName,
+        lastName: existingUser.lastName,
+        email: existingUser.email
+      },
+      updateData,
+      req
+    );
+
+    return res.json({ 
+      message: 'Perfil actualizado correctamente',
+      user: updatedUser,
+      profileImage: profileImagePath
+    });
+  } catch (error) {
+    console.error('Error al actualizar perfil:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/users/profile/image/:filename - Servir imágenes de perfil
+router.get('/profile/image/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    const imagePath = path.join(__dirname, '../../uploads/profiles', filename);
+    
+    if (fs.existsSync(imagePath)) {
+      res.sendFile(imagePath);
+    } else {
+      res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+  } catch (error) {
+    console.error('Error al servir imagen:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 

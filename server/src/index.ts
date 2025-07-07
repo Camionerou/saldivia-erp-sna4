@@ -83,6 +83,9 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Servir archivos estáticos (imágenes de perfil)
+app.use('/uploads', express.static('uploads'));
+
 // Middleware de logging para todas las requests
 app.use((req, _res, next) => {
   console.log(`🔍 ${req.method} ${req.path} - ${new Date().toISOString()}`);

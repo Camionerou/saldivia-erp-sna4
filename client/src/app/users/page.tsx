@@ -63,10 +63,13 @@ import DeleteUserDialog from '@/components/users/DeleteUserDialog';
 import PermissionsModal from '@/components/users/PermissionsModal';
 import ChangePasswordModal from '@/components/users/ChangePasswordModal';
 import UserHistoryModal from '@/components/users/UserHistoryModal';
+import ProfileManager from '@/components/users/ProfileManager';
+import { usePermissions } from '@/hooks/usePermissions';
 import { User, Profile } from '@/types/user';
 
 export default function UsersPage() {
   const router = useRouter();
+  const permissions = usePermissions();
   const [users, setUsers] = useState<User[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +95,7 @@ export default function UsersPage() {
   const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [profileManagerOpen, setProfileManagerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   
@@ -154,12 +158,12 @@ export default function UsersPage() {
     setPage(1); // Reset a primera página al buscar
   };
   
-  const handleStatusFilterChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+  const handleStatusFilterChange = (event: any) => {
     setStatusFilter(event.target.value as string);
     setPage(1);
   };
   
-  const handleProfileFilterChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+  const handleProfileFilterChange = (event: any) => {
     setProfileFilter(event.target.value as string);
     setPage(1);
   };
@@ -291,6 +295,25 @@ export default function UsersPage() {
     setHistoryModalOpen(true);
   };
 
+  const handleUpdateProfile = async (formData: FormData) => {
+    try {
+      setActionLoading(true);
+      const response = await api.put('/api/users/profile', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      showSnackbar('Perfil actualizado correctamente', 'success');
+      await fetchData(); // Recargar datos
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Error al actualizar el perfil';
+      showSnackbar(errorMessage, 'error');
+      throw error;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleSaveUser = async (userData: Partial<User>) => {
     try {
       setActionLoading(true);
@@ -376,11 +399,21 @@ export default function UsersPage() {
           </Button>
           <Button
             color="inherit"
-            startIcon={<Add />}
-            onClick={handleCreateUser}
+            startIcon={<Person />}
+            onClick={() => setProfileManagerOpen(true)}
+            sx={{ mr: 1 }}
           >
-            Nuevo Usuario
+            Mi Perfil
           </Button>
+          {permissions.canCreateUsers() && (
+            <Button
+              color="inherit"
+              startIcon={<Add />}
+              onClick={handleCreateUser}
+            >
+              Nuevo Usuario
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 
@@ -449,15 +482,17 @@ export default function UsersPage() {
                   >
                     Limpiar
                   </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={<GetApp />}
-                    onClick={(event) => setExportMenuAnchor(event.currentTarget)}
-                    disabled={actionLoading}
-                  >
-                    Exportar
-                  </Button>
+                  {permissions.canExportData() && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<GetApp />}
+                      onClick={(event) => setExportMenuAnchor(event.currentTarget)}
+                      disabled={actionLoading}
+                    >
+                      Exportar
+                    </Button>
+                  )}
                 </Stack>
               </Grid>
             </Grid>
@@ -581,7 +616,7 @@ export default function UsersPage() {
                           <TableCell>{user.email}</TableCell>
                           <TableCell>
                             <Chip
-                              label={user.profile || 'Sin perfil'}
+                              label={typeof user.profile === 'string' ? user.profile : user.profile?.name || 'Sin perfil'}
                               size="small"
                               color={user.profile ? 'primary' : 'default'}
                             />
@@ -597,45 +632,55 @@ export default function UsersPage() {
                             />
                           </TableCell>
                           <TableCell align="center">
-                            <IconButton 
-                              size="small"
-                              onClick={() => handleEditUser(user)}
-                              title="Editar usuario"
-                            >
-                              <Edit />
-                            </IconButton>
-                            <IconButton 
-                              size="small"
-                              color="secondary"
-                              onClick={() => handleManagePermissions(user)}
-                              title="Gestionar permisos"
-                            >
-                              <Security />
-                            </IconButton>
-                            <IconButton 
-                              size="small"
-                              color="primary"
-                              onClick={() => handleChangePassword(user)}
-                              title="Cambiar contraseña"
-                            >
-                              <VpnKey />
-                            </IconButton>
-                            <IconButton 
-                              size="small"
-                              color="info"
-                              onClick={() => handleViewHistory(user)}
-                              title="Ver historial"
-                            >
-                              <History />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              color="error"
-                              onClick={() => handleDeleteUser(user)}
-                              title="Eliminar usuario"
-                            >
-                              <Delete />
-                            </IconButton>
+                            {permissions.canManageUsers() && (
+                              <IconButton 
+                                size="small"
+                                onClick={() => handleEditUser(user)}
+                                title="Editar usuario"
+                              >
+                                <Edit />
+                              </IconButton>
+                            )}
+                            {permissions.canManagePermissions() && (
+                              <IconButton 
+                                size="small"
+                                color="secondary"
+                                onClick={() => handleManagePermissions(user)}
+                                title="Gestionar permisos"
+                              >
+                                <Security />
+                              </IconButton>
+                            )}
+                            {permissions.canChangePasswords() && (
+                              <IconButton 
+                                size="small"
+                                color="primary"
+                                onClick={() => handleChangePassword(user)}
+                                title="Cambiar contraseña"
+                              >
+                                <VpnKey />
+                              </IconButton>
+                            )}
+                            {permissions.canViewHistory() && (
+                              <IconButton 
+                                size="small"
+                                color="info"
+                                onClick={() => handleViewHistory(user)}
+                                title="Ver historial"
+                              >
+                                <History />
+                              </IconButton>
+                            )}
+                            {permissions.canDeleteUsers() && (
+                              <IconButton 
+                                size="small" 
+                                color="error"
+                                onClick={() => handleDeleteUser(user)}
+                                title="Eliminar usuario"
+                              >
+                                <Delete />
+                              </IconButton>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -765,6 +810,12 @@ export default function UsersPage() {
         open={historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
         user={selectedUser}
+      />
+
+      <ProfileManager
+        open={profileManagerOpen}
+        onClose={() => setProfileManagerOpen(false)}
+        onUpdateProfile={handleUpdateProfile}
       />
 
       {/* Notificaciones */}

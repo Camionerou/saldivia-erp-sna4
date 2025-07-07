@@ -32,8 +32,8 @@ interface FormData {
   email: string;
   firstName: string;
   lastName: string;
-  password: string;
-  confirmPassword: string;
+  password?: string;
+  confirmPassword?: string;
   profileName: string;
   active: boolean;
 }
@@ -68,9 +68,7 @@ const UserModal: React.FC<UserModalProps> = ({
         email: user.email || '',
         firstName: user.firstName || '',
         lastName: user.lastName || '',
-        password: '',
-        confirmPassword: '',
-        profileName: user.profile || '',
+        profileName: typeof user.profile === 'string' ? user.profile : '',
         active: user.active ?? true
       });
     } else {
@@ -120,14 +118,17 @@ const UserModal: React.FC<UserModalProps> = ({
       newErrors.email = 'El email no tiene un formato válido';
     }
 
-    if (!isEditing && !formData.password) {
-      newErrors.password = 'La contraseña es requerida';
-    } else if (formData.password && formData.password.length < 6) {
-      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
-    }
+    // Solo validar contraseña en modo creación
+    if (!isEditing) {
+      if (!formData.password) {
+        newErrors.password = 'La contraseña es requerida';
+      } else if (formData.password.length < 6) {
+        newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
+      }
 
-    if (formData.password && formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+      if (formData.password && formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = 'Las contraseñas no coinciden';
+      }
     }
 
     setErrors(newErrors);
@@ -149,7 +150,8 @@ const UserModal: React.FC<UserModalProps> = ({
         active: formData.active
       };
 
-      if (formData.password) {
+      // Solo incluir contraseña en modo creación
+      if (!isEditing && formData.password) {
         (userData as any).password = formData.password;
       }
 
@@ -216,31 +218,36 @@ const UserModal: React.FC<UserModalProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label={isEditing ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
-              type="password"
-              value={formData.password}
-              onChange={handleChange('password')}
-              error={Boolean(errors.password)}
-              helperText={errors.password}
-              required={!isEditing}
-            />
-          </Grid>
+          {/* Solo mostrar campos de contraseña en modo creación */}
+          {!isEditing && (
+            <>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Contraseña"
+                  type="password"
+                  value={formData.password || ''}
+                  onChange={handleChange('password')}
+                  error={Boolean(errors.password)}
+                  helperText={errors.password}
+                  required
+                />
+              </Grid>
 
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Confirmar Contraseña"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleChange('confirmPassword')}
-              error={Boolean(errors.confirmPassword)}
-              helperText={errors.confirmPassword}
-              required={!isEditing || Boolean(formData.password)}
-            />
-          </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Confirmar Contraseña"
+                  type="password"
+                  value={formData.confirmPassword || ''}
+                  onChange={handleChange('confirmPassword')}
+                  error={Boolean(errors.confirmPassword)}
+                  helperText={errors.confirmPassword}
+                  required
+                />
+              </Grid>
+            </>
+          )}
 
           <Grid item xs={12} md={6}>
             <FormControl fullWidth>

@@ -33,14 +33,18 @@ model User {
 }
 
 model Profile {
-  id          String  @id @default(cuid())
-  userId      String  @unique
-  name        String
-  description String?
-  permissions Json    // Almacena permisos como JSON
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  name         String
+  description  String?
+  permissions  Json    // Almacena permisos como JSON
+  profileImage String? // Ruta de la imagen de perfil
+  phone        String? // Teléfono del usuario
+  department   String? // Departamento
+  position     String? // Cargo/Posición
   
   // Relaciones
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("profiles")
 }
