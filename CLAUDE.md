@@ -5,6 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 Saldivia ERP - Modern business management system for Saldivia bus body manufacturing company in Alvear, Santa Fe, Argentina. This full-stack application replaces a legacy system and provides comprehensive ERP functionality including accounting, banking, purchases, sales, and tax management.
 
+**Current Version: 1.0.2-dev**
+- v1.0.1: ✅ Complete user management module with advanced features
+- v1.0.2: 🚧 In development - Next module to be determined
+
 ## Architecture
 - **Frontend**: Next.js 14 with TypeScript, Material-UI v5, React Query for state management
 - **Backend**: Node.js/Express with TypeScript, Prisma ORM, MySQL database
