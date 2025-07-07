@@ -1,13 +1,15 @@
-# 🚌 ERP Saldivia Buses - Sistema de Gestión Integral
+# 🚌 ERP Saldivia - Sistema de Gestión Integral
 
-Sistema ERP moderno y completo desarrollado para **Saldivia Buses** de Alvear, Santa Fe, Argentina. Esta aplicación reemplaza el sistema legacy con tecnologías de vanguardia, manteniendo toda la funcionalidad existente y agregando nuevas características.
+Sistema ERP moderno y completo desarrollado para **Saldivia** de Alvear, Santa Fe, Argentina. Esta aplicación reemplaza el sistema legacy con tecnologías de vanguardia, manteniendo toda la funcionalidad existente y agregando nuevas características.
+
+**Saldivia** es una empresa argentina líder en la **fabricación de carrocerías de buses y ómnibus**, ubicada en el Parque Industrial de Alvear, Santa Fe. Con décadas de experiencia en el sector automotriz, la empresa se especializa en el diseño y fabricación de carrocerías para transporte de pasajeros, siendo reconocida en el mercado argentino por la calidad y durabilidad de sus productos.
 
 ## 🎯 Características Principales
 
 ### ✨ **Interfaz Moderna**
 - **Responsive Design** - Funciona en todos los dispositivos
 - **Material-UI** - Componentes modernos y elegantes
-- **Tema personalizado** - Colores corporativos de Saldivia Buses
+- **Tema personalizado** - Colores corporativos de Saldivia
 - **Navegación intuitiva** - Fácil acceso a todas las funciones
 
 ### 🔐 **Seguridad Avanzada**
@@ -120,8 +122,8 @@ PORT=3001
 NODE_ENV=development
 
 # Empresa
-COMPANY_NAME="Saldivia Buses"
-COMPANY_ADDRESS="Alvear, Santa Fe, Argentina"
+COMPANY_NAME="Saldivia"
+COMPANY_ADDRESS="Parque Industrial Alvear, Santa Fe, Argentina"
 ```
 
 #### Frontend (client/.env.local)
@@ -185,12 +187,12 @@ cd client && npm run dev
 - ✅ Configuraciones del sistema
 
 ### **Proceso de Migración**
-1. **Backup completo** del sistema actual
-2. **Instalación** del nuevo sistema
-3. **Migración automática** de datos
-4. **Verificación** de integridad
-5. **Capacitación** del personal
-6. **Go-live** coordinado
+1. **Backup completo** del sistema legacy actual
+2. **Instalación** del nuevo sistema ERP
+3. **Migración automática** de datos de fabricación y contabilidad
+4. **Verificación** de integridad de datos
+5. **Capacitación** del personal de la fábrica
+6. **Go-live** coordinado con la producción
 
 ## 🛠️ Scripts Disponibles
 
@@ -269,8 +271,8 @@ npm run seed        # Poblar datos iniciales
 - FAQ completo
 
 ### **Soporte Técnico**
-- 📧 Email: soporte@saldiviabuses.com.ar
-- 📞 Teléfono: +54 3406 XXXXXX
+- 📧 Email: info@saldiviabuses.com.ar
+- 📞 Teléfono: +54 0341 4921135
 - 💬 Chat en línea
 - 🎫 Sistema de tickets
 
@@ -282,18 +284,18 @@ npm run seed        # Poblar datos iniciales
 
 ## 📄 Licencia
 
-Desarrollo exclusivo para **Saldivia Buses**. Todos los derechos reservados.
+Desarrollo exclusivo para **Saldivia**. Todos los derechos reservados.
 
 ---
 
-**🚌 Saldivia Buses - Conectando Argentina desde 1950**  
-*Alvear, Santa Fe, Argentina*
+**🚌 Saldivia - Fabricando calidad desde 1951**  
+*Parque Industrial Alvear, Santa Fe, Argentina*
 
 ---
 
 ## 🎉 ¡Sistema ERP Moderno Listo!
 
-Este sistema ERP moderno está diseñado específicamente para las necesidades de Saldivia Buses, combinando:
+Este sistema ERP moderno está diseñado específicamente para las necesidades de Saldivia, combinando:
 
 - ✅ **827 funcionalidades** del sistema original
 - ✅ **Tecnologías modernas** y escalables  
@@ -302,4 +304,4 @@ Este sistema ERP moderno está diseñado específicamente para las necesidades d
 - ✅ **Performance optimizada**
 - ✅ **Conexión con datos legacy**
 
-¡Listo para revolucionar la gestión de Saldivia Buses! 🚀 
+¡Listo para revolucionar la gestión de Saldivia! 🚀 
