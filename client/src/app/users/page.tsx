@@ -64,6 +64,7 @@ import PermissionsModal from '@/components/users/PermissionsModal';
 import ChangePasswordModal from '@/components/users/ChangePasswordModal';
 import UserHistoryModal from '@/components/users/UserHistoryModal';
 import ProfileManager from '@/components/users/ProfileManager';
+import ProfilePermissionsModal from '@/components/users/ProfilePermissionsModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { User, Profile } from '@/types/user';
 
@@ -96,6 +97,7 @@ export default function UsersPage() {
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [profileManagerOpen, setProfileManagerOpen] = useState(false);
+  const [profilePermissionsModalOpen, setProfilePermissionsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   
@@ -405,6 +407,16 @@ export default function UsersPage() {
           >
             Mi Perfil
           </Button>
+          {permissions.canManagePermissions() && (
+            <Button
+              color="inherit"
+              startIcon={<Security />}
+              onClick={() => setProfilePermissionsModalOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              Gestionar Perfiles
+            </Button>
+          )}
           {permissions.canCreateUsers() && (
             <Button
               color="inherit"
@@ -816,6 +828,12 @@ export default function UsersPage() {
         open={profileManagerOpen}
         onClose={() => setProfileManagerOpen(false)}
         onUpdateProfile={handleUpdateProfile}
+      />
+
+      <ProfilePermissionsModal
+        open={profilePermissionsModalOpen}
+        onClose={() => setProfilePermissionsModalOpen(false)}
+        onProfilesUpdated={fetchData}
       />
 
       {/* Notificaciones */}

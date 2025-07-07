@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 
 // Configuración de multer para subida de imágenes
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     const uploadDir = path.join(__dirname, '../../uploads/profiles');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -31,7 +31,7 @@ const upload = multer({
   limits: {
     fileSize: 2 * 1024 * 1024 // 2MB máximo
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (_req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
@@ -72,6 +72,162 @@ const createAuditLog = async (
 // Ruta de prueba para diagnosticar
 router.get('/test', (_req, res) => {
   return res.json({ message: 'Ruta de usuarios funcionando correctamente', timestamp: new Date().toISOString() });
+});
+
+
+
+// PUT /api/users/profile - Actualizar perfil del usuario actual con foto
+router.put('/profile', upload.single('profileImage'), async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const username = (req as any).user?.username;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+
+    const { firstName, lastName, email, phone, department, position } = req.body;
+    
+    // Para usuario demo (adrian con ID "1"), simular actualización exitosa
+    if (username === 'adrian' && userId === '1') {
+      let profileImagePath = null;
+      if (req.file) {
+        profileImagePath = `/uploads/profiles/${req.file.filename}`;
+      }
+
+      return res.json({ 
+        message: 'Perfil actualizado correctamente (modo demo)',
+        user: {
+          id: '1',
+          username: 'adrian',
+          email: email || 'adrian@saldiviabuses.com',
+          firstName: firstName || 'Adrian',
+          lastName: lastName || 'Saldivia',
+          updatedAt: new Date().toISOString()
+        },
+        profileImage: profileImagePath
+      });
+    }
+    
+    // Para usuarios reales en la base de datos
+    try {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { profile: true }
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
+      }
+
+      // Preparar datos para actualización
+      const updateData: any = {};
+      
+      if (firstName) updateData.firstName = firstName;
+      if (lastName) updateData.lastName = lastName;
+      if (email) updateData.email = email;
+
+      // Actualizar usuario básico
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          active: true,
+          updatedAt: true
+        }
+      });
+
+      // Manejar imagen de perfil
+      let profileImagePath = null;
+      if (req.file) {
+        profileImagePath = `/uploads/profiles/${req.file.filename}`;
+        
+        // Eliminar imagen anterior si existe
+        if (existingUser.profile?.profileImage) {
+          const oldImagePath = path.join(__dirname, '../../', existingUser.profile.profileImage);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        }
+      }
+
+      // Actualizar o crear perfil extendido
+      const profileData: any = {};
+      if (phone) profileData.phone = phone;
+      if (department) profileData.department = department;
+      if (position) profileData.position = position;
+      if (profileImagePath) profileData.profileImage = profileImagePath;
+
+      if (Object.keys(profileData).length > 0) {
+        if (existingUser.profile) {
+          await prisma.profile.update({
+            where: { userId },
+            data: profileData
+          });
+        } else {
+          await prisma.profile.create({
+            data: {
+              userId,
+              name: `Perfil de ${updatedUser.username}`,
+              description: 'Perfil personalizado',
+              permissions: [],
+              ...profileData
+            }
+          });
+        }
+      }
+
+      // Log de auditoría
+      const currentUserId = (req as any).user?.id || 'admin';
+      await createAuditLog(
+        currentUserId,
+        'actualizar_perfil',
+        'user',
+        userId,
+        { 
+          firstName: existingUser.firstName,
+          lastName: existingUser.lastName,
+          email: existingUser.email
+        },
+        updateData,
+        req
+      );
+
+      return res.json({ 
+        message: 'Perfil actualizado correctamente',
+        user: updatedUser,
+        profileImage: profileImagePath
+      });
+    } catch (dbError) {
+      console.error('Error de base de datos al actualizar perfil:', dbError);
+      return res.status(500).json({ error: 'Error de base de datos' });
+    }
+  } catch (error) {
+    console.error('Error al actualizar perfil:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/users/profile/image/:filename - Servir imágenes de perfil
+router.get('/profile/image/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    const imagePath = path.join(__dirname, '../../uploads/profiles', filename);
+    
+    if (fs.existsSync(imagePath)) {
+      res.sendFile(imagePath);
+    } else {
+      res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+  } catch (error) {
+    console.error('Error al servir imagen:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
 });
 
 // Esquemas de validación
@@ -642,10 +798,10 @@ router.post('/profiles', async (req, res) => {
       });
     }
     
-    // Crear perfil sin usuario asignado inicialmente
+    // Crear perfil sin usuario asignado inicialmente (usando un userId temporal)
     const newProfile = await prisma.profile.create({
       data: {
-        userId: '', // Se asignará cuando se cree un usuario con este perfil
+        userId: `temp_${Date.now()}`, // Temporal hasta que se asigne a un usuario
         name: validatedData.name,
         description: validatedData.description || '',
         permissions: validatedData.permissions
@@ -667,6 +823,100 @@ router.post('/profiles', async (req, res) => {
       });
     }
     console.error('Error al crear perfil:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// PUT /api/users/profiles/:id - Actualizar perfil existente
+router.put('/profiles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const validatedData = createProfileSchema.parse(req.body);
+    
+    // Verificar si el perfil existe
+    const existingProfile = await prisma.profile.findUnique({
+      where: { id }
+    });
+    
+    if (!existingProfile) {
+      return res.status(404).json({ error: 'Perfil no encontrado' });
+    }
+    
+    // Verificar si ya existe otro perfil con ese nombre
+    const conflictProfile = await prisma.profile.findFirst({
+      where: {
+        AND: [
+          { id: { not: id } },
+          { name: validatedData.name }
+        ]
+      }
+    });
+    
+    if (conflictProfile) {
+      return res.status(400).json({ 
+        error: 'Ya existe otro perfil con ese nombre' 
+      });
+    }
+    
+    // Actualizar perfil
+    const updatedProfile = await prisma.profile.update({
+      where: { id },
+      data: {
+        name: validatedData.name,
+        description: validatedData.description || '',
+        permissions: validatedData.permissions
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        permissions: true
+      }
+    });
+    
+    return res.json(updatedProfile);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: 'Datos inválidos',
+        details: error.errors 
+      });
+    }
+    console.error('Error al actualizar perfil:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// DELETE /api/users/profiles/:id - Eliminar perfil
+router.delete('/profiles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verificar si el perfil existe
+    const existingProfile = await prisma.profile.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+    
+    if (!existingProfile) {
+      return res.status(404).json({ error: 'Perfil no encontrado' });
+    }
+    
+    // Verificar si el perfil está siendo usado por algún usuario
+    if (existingProfile.user && !existingProfile.userId.startsWith('temp_')) {
+      return res.status(400).json({ 
+        error: 'No se puede eliminar un perfil que está siendo usado por un usuario' 
+      });
+    }
+    
+    // Eliminar perfil
+    await prisma.profile.delete({
+      where: { id }
+    });
+    
+    return res.json({ message: 'Perfil eliminado correctamente' });
+  } catch (error) {
+    console.error('Error al eliminar perfil:', error);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
@@ -941,133 +1191,6 @@ router.get('/export', async (req, res) => {
   } catch (error) {
     console.error('Error al exportar usuarios:', error);
     return res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
-// PUT /api/users/profile - Actualizar perfil del usuario actual con foto
-router.put('/profile', upload.single('profileImage'), async (req, res) => {
-  try {
-    const userId = (req as any).user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'Usuario no autenticado' });
-    }
-
-    const { firstName, lastName, email, phone, department, position } = req.body;
-    
-    // Verificar si el usuario existe
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { profile: true }
-    });
-
-    if (!existingUser) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
-
-    // Preparar datos para actualización
-    const updateData: any = {};
-    
-    if (firstName) updateData.firstName = firstName;
-    if (lastName) updateData.lastName = lastName;
-    if (email) updateData.email = email;
-
-    // Actualizar usuario básico
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        active: true,
-        updatedAt: true
-      }
-    });
-
-    // Manejar imagen de perfil
-    let profileImagePath = null;
-    if (req.file) {
-      profileImagePath = `/uploads/profiles/${req.file.filename}`;
-      
-      // Eliminar imagen anterior si existe
-      if (existingUser.profile?.profileImage) {
-        const oldImagePath = path.join(__dirname, '../../', existingUser.profile.profileImage);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-    }
-
-    // Actualizar o crear perfil extendido
-    const profileData: any = {};
-    if (phone) profileData.phone = phone;
-    if (department) profileData.department = department;
-    if (position) profileData.position = position;
-    if (profileImagePath) profileData.profileImage = profileImagePath;
-
-    if (Object.keys(profileData).length > 0) {
-      if (existingUser.profile) {
-        await prisma.profile.update({
-          where: { userId },
-          data: profileData
-        });
-      } else {
-        await prisma.profile.create({
-          data: {
-            userId,
-            name: `Perfil de ${updatedUser.username}`,
-            description: 'Perfil personalizado',
-            permissions: [],
-            ...profileData
-          }
-        });
-      }
-    }
-
-    // Log de auditoría
-    const currentUserId = (req as any).user?.id || 'admin';
-    await createAuditLog(
-      currentUserId,
-      'actualizar_perfil',
-      'user',
-      userId,
-      { 
-        firstName: existingUser.firstName,
-        lastName: existingUser.lastName,
-        email: existingUser.email
-      },
-      updateData,
-      req
-    );
-
-    return res.json({ 
-      message: 'Perfil actualizado correctamente',
-      user: updatedUser,
-      profileImage: profileImagePath
-    });
-  } catch (error) {
-    console.error('Error al actualizar perfil:', error);
-    return res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
-// GET /api/users/profile/image/:filename - Servir imágenes de perfil
-router.get('/profile/image/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    const imagePath = path.join(__dirname, '../../uploads/profiles', filename);
-    
-    if (fs.existsSync(imagePath)) {
-      res.sendFile(imagePath);
-    } else {
-      res.status(404).json({ error: 'Imagen no encontrada' });
-    }
-  } catch (error) {
-    console.error('Error al servir imagen:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
