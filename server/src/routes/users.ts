@@ -95,17 +95,46 @@ router.put('/profile', upload.single('profileImage'), async (req, res) => {
         profileImagePath = `/uploads/profiles/${req.file.filename}`;
       }
 
+      // Guardar datos del perfil demo en un archivo temporal
+      const demoProfilePath = path.join(__dirname, '../../demo-profile.json');
+      let demoProfile: any = {};
+      
+      try {
+        if (fs.existsSync(demoProfilePath)) {
+          const profileData = fs.readFileSync(demoProfilePath, 'utf8');
+          demoProfile = JSON.parse(profileData);
+        }
+      } catch (err) {
+        console.log('Creando nuevo archivo de perfil demo');
+      }
+
+      // Actualizar datos del perfil demo
+      demoProfile = {
+        ...demoProfile,
+        firstName: firstName || demoProfile.firstName || 'Adrian',
+        lastName: lastName || demoProfile.lastName || 'Saldivia',
+        email: email || demoProfile.email || 'adrian@saldiviabuses.com',
+        phone: phone || demoProfile.phone || '+54 3405 123456',
+        department: department || demoProfile.department || 'Administración',
+        position: position || demoProfile.position || 'Director General',
+        profileImage: profileImagePath || demoProfile.profileImage,
+        updatedAt: new Date().toISOString()
+      };
+
+      // Guardar en archivo
+      fs.writeFileSync(demoProfilePath, JSON.stringify(demoProfile, null, 2));
+
       return res.json({ 
         message: 'Perfil actualizado correctamente (modo demo)',
         user: {
           id: '1',
           username: 'adrian',
-          email: email || 'adrian@saldiviabuses.com',
-          firstName: firstName || 'Adrian',
-          lastName: lastName || 'Saldivia',
-          updatedAt: new Date().toISOString()
+          email: demoProfile.email,
+          firstName: demoProfile.firstName,
+          lastName: demoProfile.lastName,
+          updatedAt: demoProfile.updatedAt
         },
-        profileImage: profileImagePath
+        profileImage: demoProfile.profileImage
       });
     }
     

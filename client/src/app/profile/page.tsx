@@ -177,6 +177,9 @@ export default function ProfilePage() {
       // Refrescar datos del usuario
       await refreshUser();
       
+      // Limpiar imagen temporal
+      setProfileImage(null);
+      
       setTimeout(() => {
         setSuccess('');
       }, 5000);

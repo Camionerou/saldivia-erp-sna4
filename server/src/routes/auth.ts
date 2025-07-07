@@ -207,33 +207,37 @@ router.get('/me', async (req, res) => {
 
     // Para usuario demo
     if (decoded.username === 'adrian') {
-      // Buscar si hay una imagen de perfil guardada para el usuario demo
-      const fs = require('fs');
+      // Leer datos del perfil demo desde archivo
       const path = require('path');
-      const uploadsDir = path.join(__dirname, '../../uploads/profiles');
-      let demoProfileImage = null;
+      const fs = require('fs');
+      const demoProfilePath = path.join(__dirname, '../../demo-profile.json');
+      let demoProfile: any = {
+        firstName: 'Adrian',
+        lastName: 'Saldivia',
+        email: 'adrian@saldiviabuses.com',
+        phone: '+54 3405 123456',
+        department: 'Administración',
+        position: 'Director General',
+        profileImage: null
+      };
       
       try {
-        if (fs.existsSync(uploadsDir)) {
-          const files = fs.readdirSync(uploadsDir);
-          const userFiles = files.filter((file: string) => file.startsWith('profile_1_'));
-          if (userFiles.length > 0) {
-            // Usar la imagen más reciente
-            userFiles.sort();
-            demoProfileImage = `/uploads/profiles/${userFiles[userFiles.length - 1]}`;
-          }
+        if (fs.existsSync(demoProfilePath)) {
+          const profileData = fs.readFileSync(demoProfilePath, 'utf8');
+          const savedProfile = JSON.parse(profileData);
+          demoProfile = { ...demoProfile, ...savedProfile };
         }
       } catch (err) {
-        console.log('Error buscando imagen de perfil demo:', err);
+        console.log('Error leyendo perfil demo:', err);
       }
       
       return res.json({
         user: {
           id: '1',
           username: 'adrian',
-          email: 'adrian@saldiviabuses.com',
-          firstName: 'Adrian',
-          lastName: 'Saldivia',
+          email: demoProfile.email,
+          firstName: demoProfile.firstName,
+          lastName: demoProfile.lastName,
           active: true,
           lastLogin: new Date().toISOString(),
           createdAt: new Date('2024-01-01').toISOString(),
@@ -241,10 +245,10 @@ router.get('/me', async (req, res) => {
             id: '1',
             name: 'Administrador',
             permissions: ['all'],
-            profileImage: demoProfileImage,
-            phone: '+54 3405 123456',
-            department: 'Administración',
-            position: 'Director General'
+            profileImage: demoProfile.profileImage,
+            phone: demoProfile.phone,
+            department: demoProfile.department,
+            position: demoProfile.position
           }
         }
       });

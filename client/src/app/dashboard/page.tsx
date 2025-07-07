@@ -20,7 +20,6 @@ import {
   Button,
   Menu,
   MenuItem,
-  Avatar,
   Divider,
   Container,
 } from '@mui/material';
@@ -46,6 +45,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '@/services/authService';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import UserAvatar from '@/components/common/UserAvatar';
 
 interface DashboardStats {
   totalSales: number;
@@ -165,9 +165,7 @@ export default function DashboardPage() {
             color="inherit"
             onClick={handleMenuOpen}
           >
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'rgba(255,255,255,0.2)' }}>
-              {user?.username?.charAt(0).toUpperCase()}
-            </Avatar>
+            <UserAvatar />
           </IconButton>
           
           <Menu
