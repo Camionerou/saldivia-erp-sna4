@@ -4,7 +4,7 @@ export interface User {
   firstName?: string;
   lastName?: string;
   email?: string;
-  profile?: string;
+  profile?: string | Profile; // Puede ser string (nombre) o objeto Profile completo
   active: boolean;
   lastLogin?: string;
   createdAt: string;

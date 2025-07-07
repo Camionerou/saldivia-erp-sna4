@@ -22,7 +22,22 @@ import {
   Avatar,
   Alert,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  TextField,
+  InputAdornment,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TableSortLabel,
+  Pagination,
+  Stack,
+  Collapse,
+  Paper,
+  Menu,
+  MenuList,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import {
   ArrowBack,
@@ -32,12 +47,22 @@ import {
   Security,
   Edit,
   Delete,
-  Refresh
+  Refresh,
+  Search,
+  FilterList,
+  GetApp,
+  History,
+  VpnKey,
+  TableChart,
+  Description
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import api from '@/services/authService';
 import UserModal from '@/components/users/UserModal';
 import DeleteUserDialog from '@/components/users/DeleteUserDialog';
+import PermissionsModal from '@/components/users/PermissionsModal';
+import ChangePasswordModal from '@/components/users/ChangePasswordModal';
+import UserHistoryModal from '@/components/users/UserHistoryModal';
 import { User, Profile } from '@/types/user';
 
 export default function UsersPage() {
@@ -47,10 +72,28 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [limit] = useState(10);
+  
+  // Estados para filtros
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [profileFilter, setProfileFilter] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  
   // Estados para modales
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   
   // Estados para notificaciones
   const [snackbar, setSnackbar] = useState({
@@ -62,12 +105,36 @@ export default function UsersPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      
+      // Construir parámetros de consulta
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        sortBy,
+        sortOrder
+      });
+      
+      if (search) params.append('search', search);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (profileFilter) params.append('profile', profileFilter);
+      
       const [usersRes, profilesRes] = await Promise.all([
-        api.get('/api/users'),
+        api.get(`/api/users?${params.toString()}`),
         api.get('/api/users/profiles'),
       ]);
       
-      setUsers(usersRes.data);
+      // Manejar respuesta con paginación
+      if (usersRes.data.users) {
+        setUsers(usersRes.data.users);
+        setTotalPages(usersRes.data.pagination.totalPages);
+        setTotalCount(usersRes.data.pagination.totalCount);
+      } else {
+        // Retrocompatibilidad con respuesta sin paginación
+        setUsers(usersRes.data);
+        setTotalPages(1);
+        setTotalCount(usersRes.data.length);
+      }
+      
       setProfiles(profilesRes.data);
     } catch (error) {
       console.error('Error fetching users data:', error);
@@ -79,7 +146,79 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, search, statusFilter, profileFilter, sortBy, sortOrder]);
+  
+  // Funciones de manejo de filtros
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+    setPage(1); // Reset a primera página al buscar
+  };
+  
+  const handleStatusFilterChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    setStatusFilter(event.target.value as string);
+    setPage(1);
+  };
+  
+  const handleProfileFilterChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    setProfileFilter(event.target.value as string);
+    setPage(1);
+  };
+  
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+  
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, newPage: number) => {
+    setPage(newPage);
+  };
+  
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+    setProfileFilter('');
+    setSortBy('createdAt');
+    setSortOrder('desc');
+    setPage(1);
+  };
+  
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+      setActionLoading(true);
+      const response = await api.get(`/api/users/export?format=${format}`, {
+        responseType: 'blob'
+      });
+      
+      // Crear URL para descarga
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Definir nombre del archivo
+      const today = new Date().toISOString().split('T')[0];
+      const filename = format === 'csv' 
+        ? `usuarios_${today}.csv`
+        : `usuarios_${today}.json`;
+      
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      showSnackbar(`Usuarios exportados correctamente a ${format.toUpperCase()}`, 'success');
+    } catch (error) {
+      console.error('Error al exportar usuarios:', error);
+      showSnackbar('Error al exportar usuarios', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info') => {
     setSnackbar({ open: true, message, severity });
@@ -102,6 +241,54 @@ export default function UsersPage() {
   const handleDeleteUser = (user: User) => {
     setSelectedUser(user);
     setDeleteDialogOpen(true);
+  };
+
+  const handleManagePermissions = (user: User) => {
+    setSelectedUser(user);
+    setPermissionsModalOpen(true);
+  };
+
+  const handleSavePermissions = async (permissions: string[]) => {
+    if (!selectedUser) return;
+    
+    try {
+      setActionLoading(true);
+      await api.put(`/api/users/${selectedUser.id}/permissions`, { permissions });
+      showSnackbar('Permisos actualizados correctamente', 'success');
+      await fetchData(); // Recargar datos
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Error al actualizar permisos';
+      showSnackbar(errorMessage, 'error');
+      throw error;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleChangePassword = (user: User) => {
+    setSelectedUser(user);
+    setPasswordModalOpen(true);
+  };
+
+  const handleSavePassword = async (newPassword: string) => {
+    if (!selectedUser) return;
+    
+    try {
+      setActionLoading(true);
+      await api.put(`/api/users/${selectedUser.id}/password`, { newPassword });
+      showSnackbar('Contraseña actualizada correctamente', 'success');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Error al cambiar contraseña';
+      showSnackbar(errorMessage, 'error');
+      throw error;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleViewHistory = (user: User) => {
+    setSelectedUser(user);
+    setHistoryModalOpen(true);
   };
 
   const handleSaveUser = async (userData: Partial<User>) => {
@@ -181,6 +368,14 @@ export default function UsersPage() {
           </Button>
           <Button
             color="inherit"
+            startIcon={<FilterList />}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            sx={{ mr: 1 }}
+          >
+            Filtros
+          </Button>
+          <Button
+            color="inherit"
             startIcon={<Add />}
             onClick={handleCreateUser}
           >
@@ -190,6 +385,91 @@ export default function UsersPage() {
       </AppBar>
 
       <Container maxWidth="xl" sx={{ mt: 3, mb: 3 }}>
+        {/* Filtros */}
+        <Collapse in={filtersOpen}>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Filtros y Búsqueda
+            </Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Buscar usuarios"
+                  value={search}
+                  onChange={handleSearchChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search />
+                      </InputAdornment>
+                    ),
+                  }}
+                  placeholder="Nombre, email, usuario..."
+                />
+              </Grid>
+              <Grid item xs={12} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Estado</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    label="Estado"
+                    onChange={handleStatusFilterChange}
+                  >
+                    <MenuItem value="all">Todos</MenuItem>
+                    <MenuItem value="active">Activos</MenuItem>
+                    <MenuItem value="inactive">Inactivos</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Perfil</InputLabel>
+                  <Select
+                    value={profileFilter}
+                    label="Perfil"
+                    onChange={handleProfileFilterChange}
+                  >
+                    <MenuItem value="">Todos los perfiles</MenuItem>
+                    {profiles.map((profile) => (
+                      <MenuItem key={profile.id} value={profile.name}>
+                        {profile.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={clearFilters}
+                  >
+                    Limpiar
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<GetApp />}
+                    onClick={(event) => setExportMenuAnchor(event.currentTarget)}
+                    disabled={actionLoading}
+                  >
+                    Exportar
+                  </Button>
+                </Stack>
+              </Grid>
+            </Grid>
+            
+            {/* Información de resultados */}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Mostrando {users.length} de {totalCount} usuarios
+              {search && ` (filtrados por "${search}")`}
+            </Typography>
+          </Paper>
+        </Collapse>
+
         {/* Resumen */}
         <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={4}>
@@ -253,11 +533,35 @@ export default function UsersPage() {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>Usuario</TableCell>
-                        <TableCell>Nombre</TableCell>
+                        <TableCell>
+                          <TableSortLabel
+                            active={sortBy === 'username'}
+                            direction={sortBy === 'username' ? sortOrder : 'asc'}
+                            onClick={() => handleSort('username')}
+                          >
+                            Usuario
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel
+                            active={sortBy === 'name'}
+                            direction={sortBy === 'name' ? sortOrder : 'asc'}
+                            onClick={() => handleSort('name')}
+                          >
+                            Nombre
+                          </TableSortLabel>
+                        </TableCell>
                         <TableCell>Email</TableCell>
                         <TableCell>Perfil</TableCell>
-                        <TableCell>Último Acceso</TableCell>
+                        <TableCell>
+                          <TableSortLabel
+                            active={sortBy === 'lastLogin'}
+                            direction={sortBy === 'lastLogin' ? sortOrder : 'asc'}
+                            onClick={() => handleSort('lastLogin')}
+                          >
+                            Último Acceso
+                          </TableSortLabel>
+                        </TableCell>
                         <TableCell>Estado</TableCell>
                         <TableCell align="center">Acciones</TableCell>
                       </TableRow>
@@ -296,13 +600,39 @@ export default function UsersPage() {
                             <IconButton 
                               size="small"
                               onClick={() => handleEditUser(user)}
+                              title="Editar usuario"
                             >
                               <Edit />
+                            </IconButton>
+                            <IconButton 
+                              size="small"
+                              color="secondary"
+                              onClick={() => handleManagePermissions(user)}
+                              title="Gestionar permisos"
+                            >
+                              <Security />
+                            </IconButton>
+                            <IconButton 
+                              size="small"
+                              color="primary"
+                              onClick={() => handleChangePassword(user)}
+                              title="Cambiar contraseña"
+                            >
+                              <VpnKey />
+                            </IconButton>
+                            <IconButton 
+                              size="small"
+                              color="info"
+                              onClick={() => handleViewHistory(user)}
+                              title="Ver historial"
+                            >
+                              <History />
                             </IconButton>
                             <IconButton 
                               size="small" 
                               color="error"
                               onClick={() => handleDeleteUser(user)}
+                              title="Eliminar usuario"
                             >
                               <Delete />
                             </IconButton>
@@ -312,6 +642,20 @@ export default function UsersPage() {
                     </TableBody>
                   </Table>
                 </TableContainer>
+                
+                {/* Paginación */}
+                {totalPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <Pagination
+                      count={totalPages}
+                      page={page}
+                      onChange={handlePageChange}
+                      color="primary"
+                      showFirstButton
+                      showLastButton
+                    />
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -355,6 +699,34 @@ export default function UsersPage() {
         </Grid>
       </Container>
 
+      {/* Menú de exportación */}
+      <Menu
+        anchorEl={exportMenuAnchor}
+        open={Boolean(exportMenuAnchor)}
+        onClose={() => setExportMenuAnchor(null)}
+      >
+        <MenuList>
+          <MenuItem onClick={() => {
+            handleExport('csv');
+            setExportMenuAnchor(null);
+          }}>
+            <ListItemIcon>
+              <TableChart />
+            </ListItemIcon>
+            <ListItemText primary="Exportar a CSV" />
+          </MenuItem>
+          <MenuItem onClick={() => {
+            handleExport('excel');
+            setExportMenuAnchor(null);
+          }}>
+            <ListItemIcon>
+              <Description />
+            </ListItemIcon>
+            <ListItemText primary="Exportar a Excel (JSON)" />
+          </MenuItem>
+        </MenuList>
+      </Menu>
+
       {/* Modales */}
       <UserModal
         open={userModalOpen}
@@ -371,6 +743,28 @@ export default function UsersPage() {
         onConfirm={handleConfirmDelete}
         user={selectedUser}
         isLoading={actionLoading}
+      />
+
+      <PermissionsModal
+        open={permissionsModalOpen}
+        onClose={() => setPermissionsModalOpen(false)}
+        onSave={handleSavePermissions}
+        user={selectedUser}
+        isLoading={actionLoading}
+      />
+
+      <ChangePasswordModal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        onSave={handleSavePassword}
+        user={selectedUser}
+        isLoading={actionLoading}
+      />
+
+      <UserHistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        user={selectedUser}
       />
 
       {/* Notificaciones */}

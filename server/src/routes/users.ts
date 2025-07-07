@@ -6,6 +6,34 @@ import { z } from 'zod';
 const router = express.Router();
 const prisma = new PrismaClient();
 
+// Función helper para crear logs de auditoría
+const createAuditLog = async (
+  userId: string,
+  action: string,
+  resource: string,
+  resourceId?: string,
+  oldValues?: any,
+  newValues?: any,
+  req?: express.Request
+) => {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action,
+        resource,
+        resourceId,
+        oldValues,
+        newValues,
+        ipAddress: req?.ip,
+        userAgent: req?.get('User-Agent')
+      }
+    });
+  } catch (error) {
+    console.error('Error al crear log de auditoría:', error);
+  }
+};
+
 // Ruta de prueba para diagnosticar
 router.get('/test', (_req, res) => {
   return res.json({ message: 'Ruta de usuarios funcionando correctamente', timestamp: new Date().toISOString() });
@@ -38,32 +66,85 @@ const createProfileSchema = z.object({
   permissions: z.array(z.string()).default([])
 });
 
-// GET /api/users - Obtener todos los usuarios
-router.get('/', async (_req, res) => {
+// GET /api/users - Obtener todos los usuarios con paginación y filtros
+router.get('/', async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        active: true,
-        lastLogin: true,
-        createdAt: true,
-        updatedAt: true,
-        profile: {
-          select: {
-            name: true,
-            description: true,
-            permissions: true
+    // Parámetros de paginación
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Parámetros de filtrado
+    const search = req.query.search as string || '';
+    const status = req.query.status as string; // 'active', 'inactive', 'all'
+    const profile = req.query.profile as string || '';
+    const sortBy = req.query.sortBy as string || 'createdAt';
+    const sortOrder = req.query.sortOrder as string || 'desc';
+    
+    // Construir filtros
+    const where: any = {};
+    
+    if (search) {
+      where.OR = [
+        { username: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+    
+    if (status === 'active') {
+      where.active = true;
+    } else if (status === 'inactive') {
+      where.active = false;
+    }
+    
+    if (profile) {
+      where.profile = {
+        name: { contains: profile, mode: 'insensitive' }
+      };
+    }
+    
+    // Configurar ordenamiento
+    const orderBy: any = {};
+    if (sortBy === 'name') {
+      orderBy.firstName = sortOrder;
+    } else if (sortBy === 'username') {
+      orderBy.username = sortOrder;
+    } else if (sortBy === 'lastLogin') {
+      orderBy.lastLogin = sortOrder;
+    } else {
+      orderBy.createdAt = sortOrder;
+    }
+    
+    // Obtener usuarios con paginación
+    const [users, totalCount] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          active: true,
+          lastLogin: true,
+          createdAt: true,
+          updatedAt: true,
+          profile: {
+            select: {
+              name: true,
+              description: true,
+              permissions: true
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+        },
+        orderBy,
+        skip,
+        take: limit
+      }),
+      prisma.user.count({ where })
+    ]);
     
     // Formatear datos para el frontend
     const formattedUsers = users.map(user => ({
@@ -78,11 +159,26 @@ router.get('/', async (_req, res) => {
       createdAt: user.createdAt.toISOString()
     }));
     
-    return res.json(formattedUsers);
+    // Metadatos de paginación
+    const totalPages = Math.ceil(totalCount / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+    
+    return res.json({
+      users: formattedUsers,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage,
+        hasPrevPage
+      }
+    });
   } catch (error) {
     console.error('Error al obtener usuarios:', error);
     
-    // Si la base de datos no está disponible, devolver datos demo
+    // Si la base de datos no está disponible, devolver datos demo con paginación
     const demoUsers = [
       {
         id: '1',
@@ -97,7 +193,17 @@ router.get('/', async (_req, res) => {
       }
     ];
     
-    return res.json(demoUsers);
+    return res.json({
+      users: demoUsers,
+      pagination: {
+        page: 1,
+        limit: 10,
+        totalCount: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false
+      }
+    });
   }
 });
 
@@ -255,6 +361,18 @@ router.post('/', async (req, res) => {
         });
       }
       
+      // Log de auditoría (usar usuario admin por defecto si no hay sesión)
+      const currentUserId = (req as any).user?.id || 'admin';
+      await createAuditLog(
+        currentUserId,
+        'crear',
+        'user',
+        newUser.id,
+        null,
+        { username: newUser.username, email: newUser.email, firstName: newUser.firstName, lastName: newUser.lastName, active: newUser.active },
+        req
+      );
+      
       return res.status(201).json(newUser);
       
     } catch (dbError) {
@@ -376,6 +494,24 @@ router.put('/:id', async (req, res) => {
       }
     }
     
+    // Log de auditoría
+    const currentUserId = (req as any).user?.id || 'admin';
+    await createAuditLog(
+      currentUserId,
+      'actualizar',
+      'user',
+      id,
+      { 
+        username: existingUser.username,
+        email: existingUser.email,
+        firstName: existingUser.firstName,
+        lastName: existingUser.lastName,
+        active: existingUser.active
+      },
+      updateData,
+      req
+    );
+    
     return res.json(updatedUser);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -402,6 +538,24 @@ router.delete('/:id', async (req, res) => {
     if (!existingUser) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
+    
+    // Log de auditoría antes de eliminar
+    const currentUserId = (req as any).user?.id || 'admin';
+    await createAuditLog(
+      currentUserId,
+      'eliminar',
+      'user',
+      id,
+      { 
+        username: existingUser.username,
+        email: existingUser.email,
+        firstName: existingUser.firstName,
+        lastName: existingUser.lastName,
+        active: existingUser.active
+      },
+      null,
+      req
+    );
     
     // Eliminar usuario (cascada eliminará perfil y sesiones)
     await prisma.user.delete({
@@ -456,6 +610,244 @@ router.post('/profiles', async (req, res) => {
       });
     }
     console.error('Error al crear perfil:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// PUT /api/users/:id/permissions - Actualizar permisos de usuario
+router.put('/:id/permissions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body;
+    
+    // Validar que permissions sea un array
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ error: 'Los permisos deben ser un array de strings' });
+    }
+    
+    // Verificar si el usuario existe
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      include: { profile: true }
+    });
+    
+    if (!existingUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    // Actualizar o crear perfil con nuevos permisos
+    if (existingUser.profile) {
+      // Actualizar perfil existente
+      await prisma.profile.update({
+        where: { userId: id },
+        data: { permissions }
+      });
+    } else {
+      // Crear nuevo perfil
+      await prisma.profile.create({
+        data: {
+          userId: id,
+          name: `Perfil de ${existingUser.username}`,
+          description: 'Perfil personalizado',
+          permissions
+        }
+      });
+    }
+    
+    // Log de auditoría
+    const currentUserId = (req as any).user?.id || 'admin';
+    await createAuditLog(
+      currentUserId,
+      'actualizar_permisos',
+      'user',
+      id,
+      { permissions: existingUser.profile?.permissions || [] },
+      { permissions },
+      req
+    );
+    
+    return res.json({ 
+      message: 'Permisos actualizados correctamente',
+      permissions 
+    });
+  } catch (error) {
+    console.error('Error al actualizar permisos:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// PUT /api/users/:id/password - Cambiar contraseña de usuario
+router.put('/:id/password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    
+    // Validar nueva contraseña
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+    }
+    
+    // Verificar si el usuario existe
+    const existingUser = await prisma.user.findUnique({
+      where: { id }
+    });
+    
+    if (!existingUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    // Hashear la nueva contraseña
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Actualizar contraseña
+    await prisma.user.update({
+      where: { id },
+      data: { 
+        password: hashedPassword,
+        updatedAt: new Date()
+      }
+    });
+    
+    // Log de auditoría
+    const currentUserId = (req as any).user?.id || 'admin';
+    await createAuditLog(
+      currentUserId,
+      'cambiar_contraseña',
+      'user',
+      id,
+      null,
+      { passwordChanged: true },
+      req
+    );
+    
+    return res.json({ message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    console.error('Error al cambiar contraseña:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/users/:id/history - Obtener historial de cambios del usuario
+router.get('/:id/history', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verificar si el usuario existe
+    const existingUser = await prisma.user.findUnique({
+      where: { id }
+    });
+    
+    if (!existingUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    // Obtener logs de auditoría relacionados con este usuario
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { userId: id }, // Acciones realizadas por este usuario
+          { resourceId: id }, // Acciones realizadas sobre este usuario
+          { 
+            AND: [
+              { resource: 'user' },
+              { resourceId: id }
+            ]
+          }
+        ]
+      },
+      include: {
+        user: {
+          select: {
+            username: true,
+            firstName: true,
+            lastName: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    return res.json(auditLogs);
+  } catch (error) {
+    console.error('Error al obtener historial:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/users/export - Exportar usuarios a CSV/Excel
+router.get('/export', async (req, res) => {
+  try {
+    const format = req.query.format as string || 'csv';
+    
+    // Obtener todos los usuarios sin paginación para exportar
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        active: true,
+        lastLogin: true,
+        createdAt: true,
+        profile: {
+          select: {
+            name: true,
+            description: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    if (format === 'csv') {
+      // Generar CSV
+      const csvHeader = 'ID,Usuario,Nombre,Apellido,Email,Perfil,Estado,Último Acceso,Fecha Creación\n';
+      const csvRows = users.map(user => {
+        const lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleString('es-AR') : 'Nunca';
+        const createdAt = new Date(user.createdAt).toLocaleString('es-AR');
+        return [
+          user.id,
+          user.username,
+          user.firstName || '',
+          user.lastName || '',
+          user.email || '',
+          user.profile?.name || 'Sin perfil',
+          user.active ? 'Activo' : 'Inactivo',
+          lastLogin,
+          createdAt
+        ].map(field => `"${field}"`).join(',');
+      }).join('\n');
+      
+      const csvContent = csvHeader + csvRows;
+      
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="usuarios_${new Date().toISOString().split('T')[0]}.csv"`);
+      return res.send('\uFEFF' + csvContent); // BOM para UTF-8
+    } else {
+      // Formato JSON para Excel (lo procesaremos en frontend)
+      const exportData = users.map(user => ({
+        ID: user.id,
+        Usuario: user.username,
+        Nombre: user.firstName || '',
+        Apellido: user.lastName || '',
+        Email: user.email || '',
+        Perfil: user.profile?.name || 'Sin perfil',
+        Estado: user.active ? 'Activo' : 'Inactivo',
+        'Último Acceso': user.lastLogin ? new Date(user.lastLogin).toLocaleString('es-AR') : 'Nunca',
+        'Fecha Creación': new Date(user.createdAt).toLocaleString('es-AR')
+      }));
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="usuarios_${new Date().toISOString().split('T')[0]}.json"`);
+      return res.json(exportData);
+    }
+  } catch (error) {
+    console.error('Error al exportar usuarios:', error);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
