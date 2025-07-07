@@ -288,7 +288,7 @@ Desarrollo exclusivo para **Saldivia**. Todos los derechos reservados.
 
 ---
 
-**🚌 Saldivia - Fabricando calidad desde 1951**  
+**🚌 Saldivia - Fabricando calidad en Argentina**  
 *Parque Industrial Alvear, Santa Fe, Argentina*
 
 ---
