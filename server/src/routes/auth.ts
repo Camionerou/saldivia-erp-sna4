@@ -29,6 +29,10 @@ router.post('/login', loginValidation, async (req: Request, res: Response) => {
         id: '1',
         username: 'adrian',
         email: 'adrian@saldiviabuses.com',
+        firstName: 'Adrian',
+        lastName: 'Saldivia',
+        active: true,
+        createdAt: new Date('2024-01-01').toISOString(),
         profile: {
           id: '1',
           name: 'Administrador',
@@ -55,6 +59,7 @@ router.post('/login', loginValidation, async (req: Request, res: Response) => {
       return res.json({
         message: 'Login exitoso',
         user: demoUser,
+        token: accessToken,
         accessToken,
         refreshToken
       });
@@ -115,8 +120,13 @@ router.post('/login', loginValidation, async (req: Request, res: Response) => {
           id: user.id,
           username: user.username,
           email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          active: user.active,
+          createdAt: user.createdAt.toISOString(),
           profile: user.profile
         },
+        token: accessToken,
         accessToken,
         refreshToken
       });
@@ -226,12 +236,15 @@ router.get('/me', async (req, res) => {
           const profileData = fs.readFileSync(demoProfilePath, 'utf8');
           const savedProfile = JSON.parse(profileData);
           demoProfile = { ...demoProfile, ...savedProfile };
+          console.log('Perfil demo cargado desde archivo:', demoProfile);
+        } else {
+          console.log('Archivo de perfil demo no existe, usando valores por defecto');
         }
       } catch (err) {
-        console.log('Error leyendo perfil demo:', err);
+        console.log('Error leyendo perfil demo, usando valores por defecto:', err);
       }
       
-      return res.json({
+      const userResponse = {
         user: {
           id: '1',
           username: 'adrian',
@@ -250,8 +263,12 @@ router.get('/me', async (req, res) => {
             department: demoProfile.department,
             position: demoProfile.position
           }
-        }
-      });
+        },
+        timestamp: Date.now() // Agregar timestamp para forzar actualización
+      };
+      
+      console.log('Respuesta del endpoint /me para usuario demo:', JSON.stringify(userResponse, null, 2));
+      return res.json(userResponse);
     }
 
     try {

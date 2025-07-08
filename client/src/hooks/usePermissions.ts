@@ -1,79 +1,86 @@
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const usePermissions = () => {
   const { user } = useAuth();
 
+  const getUserPermissions = (): string[] => {
+    if (!user?.profile) return [];
+    
+    if (typeof user.profile === 'string') {
+      // Si el perfil es solo un string, asignar permisos básicos según el nombre
+      if ((user.profile as string).toLowerCase().includes('admin')) {
+        return ['all'];
+      }
+      return ['dashboard'];
+    }
+    
+    // Si el perfil es un objeto, usar los permisos definidos
+    return user.profile.permissions || [];
+  };
+
   const hasPermission = (permission: string): boolean => {
-    if (!user?.profile?.permissions) {
-      return false;
-    }
-
-    const permissions = user.profile.permissions;
+    const permissions = getUserPermissions();
     
-    // Verificar si tiene el permiso específico, 'all' o 'admin'
-    return permissions.includes(permission) || 
-           permissions.includes('all') || 
-           permissions.includes('admin') ||
-           permissions.includes('ADMIN');
-  };
-
-  const isAdmin = (): boolean => {
-    if (!user?.profile?.permissions) {
-      return false;
-    }
-
-    const permissions = user.profile.permissions;
+    // Si tiene permiso 'all', tiene acceso a todo
+    if (permissions.includes('all')) return true;
     
-    return permissions.includes('all') || 
-           permissions.includes('admin') ||
-           permissions.includes('ADMIN');
+    // Verificar permiso específico
+    return permissions.includes(permission);
   };
 
-  const canManageUsers = (): boolean => {
-    return hasPermission('users.write') || isAdmin();
+  const hasAnyPermission = (permissionList: string[]): boolean => {
+    return permissionList.some(permission => hasPermission(permission));
   };
 
-  const canViewUsers = (): boolean => {
-    return hasPermission('users.read') || isAdmin();
-  };
-
-  const canManagePermissions = (): boolean => {
-    return isAdmin(); // Solo admin puede gestionar permisos
-  };
-
+  // Funciones específicas para diferentes acciones
   const canCreateUsers = (): boolean => {
-    return isAdmin(); // Solo admin puede crear usuarios
+    return hasAnyPermission(['all', 'admin', 'users.write']);
+  };
+
+  const canEditUsers = (): boolean => {
+    return hasAnyPermission(['all', 'admin', 'users.write']);
   };
 
   const canDeleteUsers = (): boolean => {
-    return isAdmin(); // Solo admin puede eliminar usuarios
+    return hasAnyPermission(['all', 'admin', 'users.delete']);
+  };
+
+  const canManagePermissions = (): boolean => {
+    return hasAnyPermission(['all', 'admin', 'users.permissions']);
   };
 
   const canChangePasswords = (): boolean => {
-    return hasPermission('users.password') || isAdmin();
+    return hasAnyPermission(['all', 'admin', 'users.password']);
   };
 
   const canViewHistory = (): boolean => {
-    return hasPermission('users.history') || isAdmin();
+    return hasAnyPermission(['all', 'admin', 'users.history']);
   };
 
   const canExportData = (): boolean => {
-    return hasPermission('users.export') || isAdmin();
+    return hasAnyPermission(['all', 'admin', 'users.export']);
+  };
+
+  const canAccessModule = (module: string): boolean => {
+    return hasAnyPermission(['all', 'admin', module]);
+  };
+
+  const isAdmin = (): boolean => {
+    return hasAnyPermission(['all', 'admin']);
   };
 
   return {
     hasPermission,
-    isAdmin,
-    canManageUsers,
-    canViewUsers,
-    canManagePermissions,
+    hasAnyPermission,
     canCreateUsers,
+    canEditUsers,
     canDeleteUsers,
+    canManagePermissions,
     canChangePasswords,
     canViewHistory,
     canExportData,
-    user
+    canAccessModule,
+    isAdmin,
+    getUserPermissions
   };
-};
-
-export default usePermissions; 
+}; 

@@ -29,7 +29,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface ProfileManagerProps {
   open: boolean;
   onClose: () => void;
-  onUpdateProfile: (data: FormData) => Promise<void>;
+  onUpdateProfile: (data: FormData) => Promise<any>;
 }
 
 interface ProfileFormData {
@@ -46,12 +46,13 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
   onClose,
   onUpdateProfile
 }) => {
-  const { user } = useAuth();
+  const { user, updateUserProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<ProfileFormData>({
@@ -62,6 +63,59 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
     department: '',
     position: ''
   });
+
+  // Actualizar datos cuando cambie el usuario o se abra el modal
+  React.useEffect(() => {
+    if (open && user) {
+      // SOLUCIÓN RADICAL: Cargar imagen actual como imagen temporal
+      if (user?.profile && typeof user.profile === 'object' && user.profile.profileImage) {
+        let imageUrl = user.profile.profileImage;
+        
+        // Si no es una URL completa, construir la URL base
+        if (!imageUrl.startsWith('http')) {
+          const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          imageUrl = `${baseUrl}${imageUrl}`;
+        }
+        
+        // Limpiar timestamps existentes antes de agregar uno nuevo
+        imageUrl = imageUrl.split('?t=')[0];
+        const finalUrl = `${imageUrl}?t=${Date.now()}`;
+        
+        // CARGAR LA IMAGEN ACTUAL COMO TEMPORAL
+        fetch(finalUrl)
+          .then(response => response.blob())
+          .then(blob => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              setProfileImage(e.target?.result as string);
+              console.log('Imagen actual cargada como temporal');
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {
+            console.log('No se pudo cargar imagen actual');
+            setProfileImage(null);
+          });
+      } else {
+        setProfileImage(null);
+      }
+      
+      // Actualizar formData con datos del usuario y perfil extendido
+      setFormData({
+        firstName: user?.firstName || '',
+        lastName: user?.lastName || '',
+        email: user?.email || '',
+        phone: (user?.profile && typeof user.profile === 'object' && user.profile.phone) || '',
+        department: (user?.profile && typeof user.profile === 'object' && user.profile.department) || '',
+        position: (user?.profile && typeof user.profile === 'object' && user.profile.position) || ''
+      });
+      
+      // Resetear estados
+      setError('');
+      setSuccess(false);
+      setIsEditing(false);
+    }
+  }, [open, user?.profile?.profileImage, user?.firstName, user?.lastName, user?.email]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -99,13 +153,14 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
   const handleSave = async () => {
     try {
       setLoading(true);
+      setIsSaving(true);
       setError('');
 
       const formDataToSend = new FormData();
       
       // Agregar datos del perfil
       Object.entries(formData).forEach(([key, value]) => {
-        if (value) {
+        if (value && value.trim() !== '') {
           formDataToSend.append(key, value);
         }
       });
@@ -115,9 +170,34 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
         formDataToSend.append('profileImage', fileInputRef.current.files[0]);
       }
 
-      await onUpdateProfile(formDataToSend);
+      const response = await onUpdateProfile(formDataToSend);
+      
+      // SOLUCIÓN RADICAL: Si hay nueva imagen, NO limpiar la imagen temporal
+      if (fileInputRef.current?.files?.[0] && response?.data?.profileImage) {
+        // NO TOCAR setProfileImage(null) - mantener la imagen temporal
+        console.log('IMAGEN GUARDADA - MANTENIENDO PREVIEW');
+        
+        // Actualizar contexto pero SIN limpiar imagen temporal
+        if (user?.profile) {
+          updateUserProfile({
+            profile: {
+              ...user.profile,
+              profileImage: response.data.profileImage
+            }
+          });
+        }
+      }
+      
       setSuccess(true);
       setIsEditing(false);
+      
+      // Limpiar la referencia del archivo después de guardar
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+      // NO LIMPIAR LA IMAGEN TEMPORAL - DEJARLA PERMANENTE
+      // setProfileImage(null); // COMENTADO PARA SIEMPRE
       
       setTimeout(() => {
         setSuccess(false);
@@ -125,9 +205,11 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
       }, 2000);
 
     } catch (err: any) {
-      setError(err.message || 'Error al actualizar el perfil');
+      console.error('Error al actualizar perfil:', err);
+      setError(err.response?.data?.error || err.message || 'Error al actualizar el perfil');
     } finally {
       setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -137,12 +219,15 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
       firstName: user?.firstName || '',
       lastName: user?.lastName || '',
       email: user?.email || '',
-      phone: '',
-      department: '',
-      position: ''
+      phone: (user?.profile && typeof user.profile === 'object' && user.profile.phone) || '',
+      department: (user?.profile && typeof user.profile === 'object' && user.profile.department) || '',
+      position: (user?.profile && typeof user.profile === 'object' && user.profile.position) || ''
     });
-    setProfileImage(null);
+    // NO LIMPIAR LA IMAGEN - setProfileImage(null);
     setError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const getInitials = () => {
@@ -199,6 +284,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
                       bgcolor: 'primary.main'
                     }}
                     src={profileImage || undefined}
+                    key={`avatar-ALWAYS-TEMP-${profileImage ? 'HAS-IMAGE' : 'NO-IMAGE'}-${Date.now()}`}
                   >
                     {!profileImage && getInitials()}
                   </Avatar>
@@ -229,7 +315,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({
                 />
 
                 <Typography variant="h6">
-                  {user?.firstName} {user?.lastName}
+                  {formData.firstName} {formData.lastName}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   @{user?.username}

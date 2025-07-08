@@ -9,18 +9,16 @@ import {
   Button,
   Typography,
   Box,
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
   Card,
   CardContent,
   Chip,
   CircularProgress,
   Alert,
-  Divider
+  Divider,
+  List,
+  ListItem,
+  Avatar,
+  Stack
 } from '@mui/material';
 import {
   History,
@@ -80,7 +78,7 @@ export default function UserHistoryModal({
       setLoading(true);
       setError(null);
       const response = await api.get(`/api/users/${user.id}/history`);
-      setAuditLogs(response.data);
+      setAuditLogs(response.data.history || response.data);
     } catch (error: any) {
       console.error('Error al cargar historial:', error);
       setError('Error al cargar el historial del usuario');
@@ -250,90 +248,92 @@ export default function UserHistoryModal({
               Historial completo de acciones realizadas sobre el usuario {user?.username}
             </Typography>
             
-            <Timeline>
+            <List>
               {auditLogs.map((log, index) => {
                 const changes = formatChanges(log.oldValues, log.newValues);
-                const isLast = index === auditLogs.length - 1;
                 
                 return (
-                  <TimelineItem key={log.id}>
-                    <TimelineSeparator>
-                      <TimelineDot 
-                        color={getActionColor(log.action) as any}
-                        variant="outlined"
+                  <ListItem key={log.id} sx={{ display: 'block', px: 0, pb: 2 }}>
+                    <Stack direction="row" spacing={2}>
+                      <Avatar 
+                        sx={{ 
+                          bgcolor: `${getActionColor(log.action)}.light`,
+                          color: `${getActionColor(log.action)}.contrastText`,
+                          width: 40,
+                          height: 40
+                        }}
                       >
                         {getActionIcon(log.action)}
-                      </TimelineDot>
-                      {!isLast && <TimelineConnector />}
-                    </TimelineSeparator>
-                    
-                    <TimelineContent>
-                      <Card variant="outlined" sx={{ mb: 2 }}>
-                        <CardContent>
-                          {/* Header */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                              {getActionDescription(log)}
+                      </Avatar>
+                      
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Card variant="outlined" sx={{ mb: 1 }}>
+                          <CardContent>
+                            {/* Header */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                                {getActionDescription(log)}
+                              </Typography>
+                              <Chip
+                                label={log.action}
+                                color={getActionColor(log.action) as any}
+                                size="small"
+                                variant="outlined"
+                              />
+                            </Box>
+                            
+                            {/* Fecha y usuario */}
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              {formatDate(log.createdAt)}
+                              {log.user && (
+                                <> • Por: {log.user.firstName} {log.user.lastName} ({log.user.username})</>
+                              )}
                             </Typography>
-                            <Chip
-                              label={log.action}
-                              color={getActionColor(log.action) as any}
-                              size="small"
-                              variant="outlined"
-                            />
-                          </Box>
-                          
-                          {/* Fecha y usuario */}
-                          <Typography variant="body2" color="text.secondary" gutterBottom>
-                            {formatDate(log.createdAt)}
-                            {log.user && (
-                              <> • Por: {log.user.firstName} {log.user.lastName} ({log.user.username})</>
-                            )}
-                          </Typography>
-                          
-                          {/* Cambios detallados */}
-                          {changes && changes.length > 0 && (
-                            <Box sx={{ mt: 2 }}>
-                              <Divider sx={{ mb: 1 }} />
-                              <Typography variant="body2" color="text.secondary" gutterBottom>
-                                Cambios realizados:
-                              </Typography>
-                              {changes.map((change, idx) => (
-                                <Typography 
-                                  key={idx} 
-                                  variant="body2" 
-                                  sx={{ 
-                                    fontFamily: 'monospace',
-                                    bgcolor: 'action.hover',
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    mt: 0.5
-                                  }}
-                                >
-                                  • {change}
+                            
+                            {/* Cambios detallados */}
+                            {changes && changes.length > 0 && (
+                              <Box sx={{ mt: 2 }}>
+                                <Divider sx={{ mb: 1 }} />
+                                <Typography variant="body2" color="text.secondary" gutterBottom>
+                                  Cambios realizados:
                                 </Typography>
-                              ))}
-                            </Box>
-                          )}
-                          
-                          {/* Información técnica */}
-                          {(log.ipAddress || log.userAgent) && (
-                            <Box sx={{ mt: 2 }}>
-                              <Divider sx={{ mb: 1 }} />
-                              <Typography variant="caption" color="text.secondary">
-                                {log.ipAddress && <>IP: {log.ipAddress}</>}
-                                {log.ipAddress && log.userAgent && <> • </>}
-                                {log.userAgent && <>Navegador: {log.userAgent.substring(0, 50)}...</>}
-                              </Typography>
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </TimelineContent>
-                  </TimelineItem>
+                                {changes.map((change, idx) => (
+                                  <Typography 
+                                    key={idx} 
+                                    variant="body2" 
+                                    sx={{ 
+                                      fontFamily: 'monospace',
+                                      bgcolor: 'action.hover',
+                                      p: 0.5,
+                                      borderRadius: 1,
+                                      mt: 0.5
+                                    }}
+                                  >
+                                    • {change}
+                                  </Typography>
+                                ))}
+                              </Box>
+                            )}
+                            
+                            {/* Información técnica */}
+                            {(log.ipAddress || log.userAgent) && (
+                              <Box sx={{ mt: 2 }}>
+                                <Divider sx={{ mb: 1 }} />
+                                <Typography variant="caption" color="text.secondary">
+                                  {log.ipAddress && <>IP: {log.ipAddress}</>}
+                                  {log.ipAddress && log.userAgent && <> • </>}
+                                  {log.userAgent && <>Navegador: {log.userAgent.substring(0, 50)}...</>}
+                                </Typography>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Box>
+                    </Stack>
+                  </ListItem>
                 );
               })}
-            </Timeline>
+            </List>
           </>
         )}
       </DialogContent>

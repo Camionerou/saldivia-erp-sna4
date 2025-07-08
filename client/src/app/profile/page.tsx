@@ -1,456 +1,396 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
+  Container,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  Avatar,
-  Button,
-  TextField,
   Grid,
+  Avatar,
   IconButton,
-  Alert,
-  CircularProgress,
-  Divider,
+  AppBar,
+  Toolbar,
+  Button,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  ListItemSecondaryAction,
   Chip,
-  Paper,
-  Stack,
-  Tabs,
-  Tab
+  Divider,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
-  PhotoCamera,
-  Edit as EditIcon,
-  Save as SaveIcon,
-  Cancel as CancelIcon,
-  Person as PersonIcon,
-  Security as SecurityIcon,
-  History as HistoryIcon
+  ArrowBack,
+  Edit,
+  Person,
+  History,
+  Security,
+  VpnKey,
+  Add,
+  Delete
 } from '@mui/icons-material';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import ProfileManager from '@/components/users/ProfileManager';
+import UserAvatar from '@/components/common/UserAvatar';
 import api from '@/services/authService';
 
-interface ProfileFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  department: string;
-  position: string;
-}
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`profile-tabpanel-${index}`}
-      aria-labelledby={`profile-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
+interface ActivityEntry {
+  id: string;
+  action: string;
+  resource: string;
+  createdAt: string;
+  description?: string;
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { user, refreshUser } = useAuth();
-  const [tabValue, setTabValue] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [success, setSuccess] = useState<string>('');
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [profileManagerOpen, setProfileManagerOpen] = useState(false);
+  const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<ProfileFormData>({
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    email: user?.email || '',
-    phone: '',
-    department: '',
-    position: ''
-  });
-
-  // Cargar imagen de perfil actual
   useEffect(() => {
-    if (user?.profile && typeof user.profile === 'object' && user.profile.profileImage) {
-      setProfileImageUrl(`${process.env.NEXT_PUBLIC_API_URL}${user.profile.profileImage}`);
+    if (user) {
+      fetchRecentActivity();
     }
-    
-    // Actualizar formData con datos del usuario
-    setFormData({
-      firstName: user?.firstName || '',
-      lastName: user?.lastName || '',
-      email: user?.email || '',
-      phone: (user?.profile && typeof user.profile === 'object' && user.profile.phone) || '',
-      department: (user?.profile && typeof user.profile === 'object' && user.profile.department) || '',
-      position: (user?.profile && typeof user.profile === 'object' && user.profile.position) || ''
-    });
   }, [user]);
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Validar tamaño (máximo 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        setError('La imagen debe ser menor a 2MB');
-        return;
-      }
-
-      // Validar tipo
-      if (!file.type.startsWith('image/')) {
-        setError('Solo se permiten archivos de imagen');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setProfileImage(e.target?.result as string);
-        setError('');
-      };
-      reader.readAsDataURL(file);
+  const fetchRecentActivity = async () => {
+    if (!user) return;
+    
+    try {
+      setActivityLoading(true);
+      setActivityError(null);
+      const response = await api.get(`/api/users/${user.id}/history`);
+      const activities = (response.data.history || response.data || []).slice(0, 5); // Últimas 5 actividades
+      setRecentActivity(activities);
+    } catch (error: any) {
+      console.error('Error al cargar actividad reciente:', error);
+      setActivityError('No se pudo cargar la actividad reciente');
+      setRecentActivity([]);
+    } finally {
+      setActivityLoading(false);
     }
   };
 
-  const handleInputChange = (field: keyof ProfileFormData) => (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: event.target.value
-    }));
-  };
-
-  const handleSave = async () => {
+  const handleUpdateProfile = async (formData: FormData) => {
     try {
-      setLoading(true);
-      setError('');
-
-      const formDataToSend = new FormData();
-      
-      // Agregar datos del perfil
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value) {
-          formDataToSend.append(key, value);
-        }
-      });
-
-      // Agregar imagen si hay una nueva
-      if (fileInputRef.current?.files?.[0]) {
-        formDataToSend.append('profileImage', fileInputRef.current.files[0]);
-      }
-
-      const response = await api.put('/api/users/profile', formDataToSend, {
+      const response = await api.put('/api/users/profile', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
-      setSuccess('Perfil actualizado correctamente');
-      setIsEditing(false);
       
-      // Actualizar imagen de perfil si se devolvió una nueva
-      if (response.data.profileImage) {
-        setProfileImageUrl(`${process.env.NEXT_PUBLIC_API_URL}${response.data.profileImage}`);
-      }
-      
-      // Refrescar datos del usuario
+      // Refrescar el usuario en el contexto
       await refreshUser();
       
-      // Limpiar imagen temporal
-      setProfileImage(null);
+      // Refrescar actividad reciente
+      await fetchRecentActivity();
       
-      setTimeout(() => {
-        setSuccess('');
-      }, 5000);
-
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Error al actualizar el perfil');
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.error('Error al actualizar perfil:', error);
+      throw error;
     }
   };
 
-  const handleCancel = () => {
-    setIsEditing(false);
-    setFormData({
-      firstName: user?.firstName || '',
-      lastName: user?.lastName || '',
-      email: user?.email || '',
-      phone: (user?.profile && typeof user.profile === 'object' && user.profile.phone) || '',
-      department: (user?.profile && typeof user.profile === 'object' && user.profile.department) || '',
-      position: (user?.profile && typeof user.profile === 'object' && user.profile.position) || ''
+  const getActivityIcon = (action: string) => {
+    switch (action.toLowerCase()) {
+      case 'crear':
+      case 'create':
+        return <Add />;
+      case 'actualizar':
+      case 'actualizar_perfil':
+      case 'update':
+        return <Edit />;
+      case 'eliminar':
+      case 'delete':
+        return <Delete />;
+      case 'cambiar_contraseña':
+      case 'change_password':
+        return <VpnKey />;
+      case 'actualizar_permisos':
+      case 'update_permissions':
+        return <Security />;
+      case 'login':
+        return <Person />;
+      default:
+        return <History />;
+    }
+  };
+
+  const getActivityColor = (action: string) => {
+    switch (action.toLowerCase()) {
+      case 'crear':
+      case 'create':
+        return 'success';
+      case 'actualizar':
+      case 'actualizar_perfil':
+      case 'update':
+        return 'primary';
+      case 'eliminar':
+      case 'delete':
+        return 'error';
+      case 'cambiar_contraseña':
+      case 'change_password':
+        return 'warning';
+      case 'actualizar_permisos':
+      case 'update_permissions':
+        return 'secondary';
+      case 'login':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
+  const getActivityDescription = (activity: ActivityEntry) => {
+    const action = activity.action.toLowerCase();
+    
+    switch (action) {
+      case 'crear':
+      case 'create':
+        return 'Cuenta creada';
+      case 'actualizar_perfil':
+        return 'Perfil actualizado';
+      case 'actualizar':
+      case 'update':
+        return 'Información actualizada';
+      case 'cambiar_contraseña':
+      case 'change_password':
+        return 'Contraseña modificada';
+      case 'actualizar_permisos':
+      case 'update_permissions':
+        return 'Permisos actualizados';
+      case 'login':
+        return 'Inicio de sesión';
+      default:
+        return activity.action;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return 'Hace un momento';
+    if (diffMins < 60) return `Hace ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+    if (diffHours < 24) return `Hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+    if (diffDays < 7) return `Hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+    
+    return date.toLocaleDateString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
-    setProfileImage(null);
-    setError('');
   };
 
-  const getInitials = () => {
-    const firstName = user?.firstName || '';
-    const lastName = user?.lastName || '';
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-  };
 
-  const getUserPermissions = () => {
-    if (user?.profile && typeof user.profile === 'object') {
-      return user.profile.permissions || [];
-    }
-    return [];
-  };
+
+  if (!user) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Mi Perfil
-      </Typography>
+    <Box sx={{ flexGrow: 1 }}>
+      <AppBar position="static">
+        <Toolbar>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={() => router.push('/dashboard')}
+          >
+            <ArrowBack />
+          </IconButton>
+          <Person sx={{ mr: 2 }} />
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Mi Perfil
+          </Typography>
+          <Button
+            color="inherit"
+            startIcon={<Edit />}
+            onClick={() => setProfileManagerOpen(true)}
+          >
+            Editar Perfil
+          </Button>
+        </Toolbar>
+      </AppBar>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {success}
-        </Alert>
-      )}
-
-      <Card>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="profile tabs">
-            <Tab icon={<PersonIcon />} label="Información Personal" />
-            <Tab icon={<SecurityIcon />} label="Seguridad" />
-            <Tab icon={<HistoryIcon />} label="Actividad" />
-          </Tabs>
-        </Box>
-
-        <TabPanel value={tabValue} index={0}>
-          {/* Información Personal */}
-          <Grid container spacing={3}>
-            {/* Foto de perfil */}
-            <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center' }}>
-                <Box position="relative" display="inline-block">
-                  <Avatar
-                    sx={{ 
-                      width: 150, 
-                      height: 150, 
-                      mb: 2,
-                      fontSize: '3rem',
-                      bgcolor: 'primary.main',
-                      mx: 'auto'
-                    }}
-                    src={profileImage || profileImageUrl || undefined}
-                  >
-                    {!profileImage && !profileImageUrl && getInitials()}
-                  </Avatar>
-                  
-                  {isEditing && (
-                    <IconButton
-                      sx={{
-                        position: 'absolute',
-                        bottom: 16,
-                        right: 'calc(50% - 75px - 16px)',
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        '&:hover': { bgcolor: 'primary.dark' }
-                      }}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <PhotoCamera />
-                    </IconButton>
-                  )}
-                </Box>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={handleImageChange}
-                />
-
-                <Typography variant="h5" gutterBottom>
-                  {user?.firstName} {user?.lastName}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  @{user?.username}
-                </Typography>
-                
-                {!isEditing && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={() => setIsEditing(true)}
-                    sx={{ mt: 2 }}
-                  >
-                    Editar Perfil
-                  </Button>
-                )}
-              </Paper>
-            </Grid>
-
-            {/* Información del perfil */}
-            <Grid item xs={12} md={8}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Información Personal
-                </Typography>
-                
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Nombre"
-                      value={formData.firstName}
-                      onChange={handleInputChange('firstName')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
+      <Container maxWidth="lg" sx={{ mt: 3, mb: 3 }}>
+        <Grid container spacing={3}>
+          {/* Información del perfil */}
+          <Grid item xs={12} md={8}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <UserAvatar
+                    src={user?.profile?.profileImage}
+                    firstName={user?.firstName}
+                    lastName={user?.lastName}
+                    username={user?.username}
+                    size={80}
+                    sx={{ mr: 3 }}
+                  />
+                  <Box>
+                    <Typography variant="h4" gutterBottom>
+                      {user.firstName} {user.lastName}
+                    </Typography>
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      @{user.username}
+                    </Typography>
+                    <Chip
+                      label={typeof user.profile === 'string' ? user.profile : user.profile?.name || 'Sin perfil'}
+                      color="primary"
+                      variant="outlined"
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Apellido"
-                      value={formData.lastName}
-                      onChange={handleInputChange('lastName')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleInputChange('email')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Teléfono"
-                      value={formData.phone}
-                      onChange={handleInputChange('phone')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Departamento"
-                      value={formData.department}
-                      onChange={handleInputChange('department')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Cargo"
-                      value={formData.position}
-                      onChange={handleInputChange('position')}
-                      disabled={!isEditing}
-                      variant={isEditing ? 'outlined' : 'filled'}
-                    />
-                  </Grid>
-                </Grid>
-
-                {isEditing && (
-                  <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-                    <Button
-                      onClick={handleCancel}
-                      disabled={loading}
-                      startIcon={<CancelIcon />}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={handleSave}
-                      variant="contained"
-                      disabled={loading}
-                      startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
-                    >
-                      {loading ? 'Guardando...' : 'Guardar'}
-                    </Button>
                   </Box>
-                )}
-              </Paper>
-
-              {/* Información del sistema */}
-              <Paper sx={{ p: 3, mt: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Información del Sistema
-                </Typography>
-                
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      ID de Usuario
-                    </Typography>
-                    <Typography variant="body1">
-                      {user?.id}
-                    </Typography>
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      Nombre de Usuario
-                    </Typography>
-                    <Typography variant="body1">
-                      {user?.username}
-                    </Typography>
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary">
-                      Perfil Asignado
-                    </Typography>
-                    <Typography variant="body1">
-                      {typeof user?.profile === 'string' ? user.profile : user?.profile?.name || 'Sin perfil'}
-                    </Typography>
-                  </Grid>
-                </Grid>
+                </Box>
 
                 <Divider sx={{ my: 2 }} />
 
-                <Typography variant="subtitle2" gutterBottom>
-                  Permisos del Usuario
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Email
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {user.email}
+                    </Typography>
+                  </Grid>
+                  
+                  {user.profile && typeof user.profile === 'object' && user.profile.phone && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Teléfono
+                      </Typography>
+                      <Typography variant="body1" gutterBottom>
+                        {user.profile.phone}
+                      </Typography>
+                    </Grid>
+                  )}
+                  
+                  {user.profile && typeof user.profile === 'object' && user.profile.department && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Departamento
+                      </Typography>
+                      <Typography variant="body1" gutterBottom>
+                        {user.profile.department}
+                      </Typography>
+                    </Grid>
+                  )}
+                  
+                  {user.profile && typeof user.profile === 'object' && user.profile.position && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Cargo
+                      </Typography>
+                      <Typography variant="body1" gutterBottom>
+                        {user.profile.position}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Último acceso
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('es-AR') : 'Nunca'}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Miembro desde
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {new Date(user.createdAt).toLocaleDateString('es-AR')}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Actividad reciente */}
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Actividad Reciente
+                </Typography>
+                
+                {activityLoading && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                )}
+
+                {activityError && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    {activityError}
+                  </Alert>
+                )}
+
+                {!activityLoading && !activityError && recentActivity.length === 0 && (
+                  <Alert severity="info">
+                    No hay actividad reciente registrada.
+                  </Alert>
+                )}
+
+                {!activityLoading && !activityError && recentActivity.length > 0 && (
+                  <List>
+                    {recentActivity.map((activity, index) => (
+                      <React.Fragment key={activity.id}>
+                        <ListItem>
+                          <ListItemAvatar>
+                            <Avatar 
+                              sx={{ 
+                                bgcolor: `${getActivityColor(activity.action)}.light`,
+                                color: `${getActivityColor(activity.action)}.contrastText`,
+                                width: 32,
+                                height: 32
+                              }}
+                            >
+                              {getActivityIcon(activity.action)}
+                            </Avatar>
+                          </ListItemAvatar>
+                          <ListItemText
+                            primary={getActivityDescription(activity)}
+                            secondary={formatDate(activity.createdAt)}
+                          />
+                        </ListItem>
+                        {index < recentActivity.length - 1 && <Divider variant="inset" component="li" />}
+                      </React.Fragment>
+                    ))}
+                  </List>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Permisos */}
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Permisos
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
-                  {getUserPermissions().length > 0 ? (
-                    getUserPermissions().map((permission: string) => (
+                  {user.profile && typeof user.profile === 'object' && user.profile.permissions?.length > 0 ? (
+                    user.profile.permissions.map((permission: string) => (
                       <Chip
                         key={permission}
                         label={permission}
@@ -461,70 +401,22 @@ export default function ProfilePage() {
                     ))
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      Sin permisos asignados
+                      Sin permisos específicos asignados
                     </Typography>
                   )}
                 </Box>
-              </Paper>
-            </Grid>
+              </CardContent>
+            </Card>
           </Grid>
-        </TabPanel>
+        </Grid>
+      </Container>
 
-        <TabPanel value={tabValue} index={1}>
-          {/* Seguridad */}
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuración de Seguridad
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Para cambiar tu contraseña, contacta con el administrador del sistema.
-            </Typography>
-            
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2">
-                  Última conexión
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {user?.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Nunca'}
-                </Typography>
-              </Box>
-              
-              <Box>
-                <Typography variant="subtitle2">
-                  Cuenta creada
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {user?.createdAt ? new Date(user.createdAt).toLocaleString() : 'No disponible'}
-                </Typography>
-              </Box>
-              
-              <Box>
-                <Typography variant="subtitle2">
-                  Estado de la cuenta
-                </Typography>
-                <Chip
-                  label={user?.active ? 'Activa' : 'Inactiva'}
-                  color={user?.active ? 'success' : 'error'}
-                  size="small"
-                />
-              </Box>
-            </Stack>
-          </Paper>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
-          {/* Actividad */}
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Actividad Reciente
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              El historial de actividad estará disponible próximamente.
-            </Typography>
-          </Paper>
-        </TabPanel>
-      </Card>
+      {/* Modal de edición de perfil */}
+      <ProfileManager
+        open={profileManagerOpen}
+        onClose={() => setProfileManagerOpen(false)}
+        onUpdateProfile={handleUpdateProfile}
+      />
     </Box>
   );
 } 

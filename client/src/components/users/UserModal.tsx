@@ -155,9 +155,26 @@ const UserModal: React.FC<UserModalProps> = ({
         (userData as any).password = formData.password;
       }
 
+      console.log('Enviando datos del usuario:', userData);
+      console.log('Modo edición:', isEditing);
+
       await onSave(userData);
-      onClose();
+      
+      // Limpiar formulario después de guardar exitosamente
+      setFormData({
+        username: '',
+        email: '',
+        firstName: '',
+        lastName: '',
+        password: '',
+        confirmPassword: '',
+        profileName: '',
+        active: true
+      });
+      
+      console.log('Usuario guardado exitosamente');
     } catch (error: any) {
+      console.error('Error en handleSubmit:', error);
       setSubmitError(error.message || 'Error al guardar el usuario');
     }
   };

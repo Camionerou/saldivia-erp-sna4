@@ -141,21 +141,33 @@ export default function ProfilePermissionsModal({
         return;
       }
 
+      console.log('Guardando perfil:', formData);
+
       if (editingProfile) {
         // Actualizar perfil existente
+        console.log('Actualizando perfil existente:', editingProfile.id);
         await api.put(`/api/users/profiles/${editingProfile.id}`, formData);
         setSuccess('Perfil actualizado correctamente');
       } else {
         // Crear nuevo perfil
-        await api.post('/api/users/profiles', formData);
+        console.log('Creando nuevo perfil');
+        const response = await api.post('/api/users/profiles', formData);
+        console.log('Perfil creado exitosamente:', response.data);
         setSuccess('Perfil creado correctamente');
       }
 
       setShowCreateForm(false);
-      loadProfiles();
+      setFormData({ name: '', description: '', permissions: [] });
+      setEditingProfile(null);
+      
+      // Recargar perfiles y notificar al componente padre
+      await loadProfiles();
       onProfilesUpdated();
+      
     } catch (error: any) {
-      setError(error.response?.data?.error || 'Error al guardar perfil');
+      console.error('Error al guardar perfil:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Error al guardar perfil';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

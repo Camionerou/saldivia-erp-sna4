@@ -165,7 +165,13 @@ export default function DashboardPage() {
             color="inherit"
             onClick={handleMenuOpen}
           >
-            <UserAvatar />
+            <UserAvatar 
+              src={user?.profile?.profileImage}
+              firstName={user?.firstName}
+              lastName={user?.lastName}
+              username={user?.username}
+              size={32}
+            />
           </IconButton>
           
           <Menu
