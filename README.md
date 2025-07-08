@@ -296,13 +296,19 @@ Desarrollo exclusivo para **Saldivia**. Todos los derechos reservados.
 ## 🚀 Estado del Proyecto
 
 ### **Versiones**
-- ✅ **v1.0.1** - Módulo de usuarios completo (MAIN)
+- ✅ **v1.0.2** - Exportación y avatares completos (MAIN)
+  - ✨ Exportación completa de usuarios (CSV y Excel .xlsx)
+  - 🖼️ Sistema de avatares de usuario mejorado
+  - 🔧 Correcciones críticas en rutas y autenticación
+  - 📊 UserActionsMenu para gestión avanzada
+  - 🔍 Logs detallados para debugging
+  - 📄 Archivos Excel reales con biblioteca xlsx
+- ✅ **v1.0.1** - Módulo de usuarios base
   - Gestión completa de usuarios y permisos
   - Paginación, filtros y búsqueda avanzada
-  - Exportación CSV/Excel
   - Historial de auditoría
   - Cambio de contraseñas
-- 🚧 **v1.0.2-dev** - En desarrollo activo
+- 🚧 **v1.0.3-dev** - En desarrollo activo
 - 🛡️ **main** - Rama protegida (solo merge via PR)
 
 ### **Protección de Ramas**
